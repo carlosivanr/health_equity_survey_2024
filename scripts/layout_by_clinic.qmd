@@ -1,0 +1,681 @@
+---
+# Clinic parameter options are: 
+# All, AF Williams, Boulder, Lone Tree, Westminster, WISH
+# Options do not need to be in quotes
+params:
+  clinic: "Lone Tree"
+    
+title: "DFM Health Equities Survey 2024"
+subtitle: "`r params$clinic`"
+date: "`r format(Sys.time(), '%B %d %Y')`"
+
+# Quarto docx settings ---------------------------------------------------------
+# fig height, width, and dpi set to prevent overplotting and image quality
+format:
+  docx:
+    toc: true
+    reference-doc: "../qmd_reference/custom-reference-doc.docx"
+    output-file: LoneTree.docx
+  
+editor: source
+  
+execute: 
+  echo: false
+  warning: false
+---
+
+
+```{r load libraries}
+library(magrittr, include.only = "%<>%")
+
+pacman::p_load(tidyverse,
+               gtsummary,
+               REDCapR,
+               install = FALSE)
+```
+
+```{r pull_data()}
+pull_report <- function(report_id, val_type, header_type) {
+
+  #' pull_report
+  #'
+  #' Pulls a pre-specified report from RedCap given a credentials file to
+  #' to retrieve a token, the value type, and the header type.
+  #'
+  #' @param report_id the redcap report id
+  #' @param val_type responses as 'raw' for numbers or 'label' for character
+  #' @param header_type 'raw' for the redcap field name, 'label' for the text
+
+  path_credential <- Sys.getenv("redcap_credentials")
+
+  # Project 28323 corresponds to REDCap Health Equity Survey II
+  project_id <- 28323
+
+  .token <- retrieve_credential_local(
+    path_credential,
+    project_id,
+    check_url = TRUE,
+    check_username = FALSE,
+    check_token_pattern = TRUE,
+    username = NA_character_
+  )$token
+
+  url <- "https://redcap.ucdenver.edu/api/"
+
+  formData <- list("token" = .token,
+                   content = 'report',
+                   format = 'csv',
+                   report_id = report_id,
+                   csvDelimiter = '',
+                   rawOrLabel = val_type,
+                   rawOrLabelHeaders = header_type,
+                   exportCheckboxLabel = 'true',
+                   returnFormat = 'json'
+                   )
+
+  response <- httr::POST(url, body = formData, encode = "form")
+
+  data <- httr::content(response)
+
+  # Remove the <br> and white space from likert columns only if the responses
+  # are in label format (character)
+  data <- data %>%
+    mutate_if(is.character, ~ str_replace(., "<br>", replacement = '')) %>%
+    mutate_if(is.character, ~ str_trim(.))
+  
+  # Clean the cliff hanger response in frsp2
+  data <- data %>%
+    mutate(hi_race_frsp2 = ifelse(
+      hi_race_frsp2 == 'Personal/political beliefs about health are', 
+      NA, 
+      hi_race_frsp2))
+
+  return(data)
+}
+```
+
+```{r}
+# Pull the 2024 report in label format w/ out the demographic race columns
+data <- pull_report('128507', 'label', 'raw') %>%
+  select(-(contains("demographic_4_race")))
+
+# Pull the 2024 report in raw format for the demographic race columns only
+data_race <- pull_report('128507', 'raw', 'raw') %>%
+  select(contains("demographic_4_race"))
+
+# Merge the race cols into the main data frame
+data <- bind_cols(data, data_race)
+
+# Remove the race data frame
+rm(data_race)
+```
+
+```{r}
+# Modify the column names by removing the _2024 and _v1 suffixes
+new_col_names <-
+  colnames(data) %>%
+  str_replace(., '_2024', replacement = '') %>%
+  str_replace(., '_v1', replacement = '')
+
+# Set the new column names to harmonize column names in R
+colnames(data) <- new_col_names
+
+# Pull the column headers in label format for displaying in tables/charts
+col_labs <- names(pull_report('128507', 'raw', 'label'))
+
+# Create a data frame with the column names and their corresponding column
+# labels
+labels <- data.frame(t(col_labs))
+colnames(labels) <- new_col_names
+```
+
+```{r}
+# Set columns to factor and order the levels
+# Q1:
+data %<>%
+  mutate(across(hi_problems_q1:hi_problems_q3,
+                ~ factor(., levels = c("Not a problem at all",
+                                       "Minor problem",
+                                       "Moderate problem",
+                                       "Serious problem"))))
+
+# Q2
+data %<>%
+  mutate(across(hi_clinic_q1:hi_clinic_implicit,
+                ~ factor(., levels = c("Not at all",
+                                       "Slightly",
+                                       "Moderately",
+                                       "Very much",
+                                       "Extremely"))))
+
+# Collapse very much and extremely
+data %<>%
+  mutate(across(hi_clinic_q1:hi_clinic_implicit,
+                ~ fct_collapse(., `Very much/Extremely` = c("Very much", "Extremely"))))
+
+  
+
+# Q3.1, Q4
+data %<>%
+  mutate(across(c(hi_individual_q1, hi_clinicleaders_q1),
+                ~ factor(., levels = c("Not important at all",
+                                       "Slightly important",
+                                       "Moderately important",
+                                       "Extremely important"))))
+
+
+# Q5,Q14
+data %<>%
+  mutate(across(c(meaningful_change, org_awareness, org_collab),
+                ~ factor(., levels = c("Strongly disagree",
+                                       "Disagree",
+                                       "Agree",
+                                       "Strongly agree"))))
+
+# Q6
+data %<>%
+  mutate(across(clinic_hefocus,
+                ~ factor(., levels = c("Far too little",
+                                       "Too little",
+                                       "The right amount",
+                                       "Too much",
+                                       "Far too much"))))
+
+# Q8
+data %<>%
+  mutate(across(dash_aware,
+                ~ factor(.,
+                         levels = c("I did not know they existed.",
+                                    "I knew they existed but have never seen the data.",
+                                    "I knew they existed and have seen the data.",
+                                    "I knew they existed, have seen the data, and have used at least some of the data to shape local operations or clinical work."))))
+
+# Q10
+data %<>%
+  mutate(across(sw_skills:sw_clinicianavail,
+                ~ factor(., levels = c('Strength',
+                                       'Challenge',
+                                       'Unsure'))))
+
+# Q12
+data %<>%
+  mutate(across(confidence_disability,
+                ~ factor(., levels = c('Not at all confident',
+                                       'Not very confident',
+                                       'Somewhat confident',
+                                       'Very confident'))))
+
+# Q13
+data %<>%
+  mutate(across(disability_time:disability_other,
+                ~ factor(., levels = c('Not at all a barrier',
+                                       'Small barrier',
+                                       'Moderate barrier',
+                                       'Large barrier'))))
+```
+
+
+<!-- If clinic is set to all, then display the response rate. Cannot display a 
+response rate per clinic, since those that did not respond would not have a 
+clinic value to filter. -->
+
+`r if(params$clinic == "All"){'# Response Rate'}`
+
+```{r}
+if(params$clinic == "All") {
+  show_response_rate <-  TRUE
+} else {
+  show_response_rate <- FALSE
+}
+```
+
+```{r, eval=show_response_rate}
+data %>%
+  select(health_equity_in_dfm_practices_survey_complete) %>%
+  tbl_summary(label = list(health_equity_in_dfm_practices_survey_complete = "Survey Complete")) %>%
+  as_gt()
+```
+
+```{r}
+# Filter data to complete responses only
+data %<>%
+  filter(health_equity_in_dfm_practices_survey_complete == "Complete")
+```
+
+```{r}
+# filter data to clinic level
+if (params$clinic != 'All') {
+  data %<>%
+    filter(demographic_1_practice == params$clinic)
+}
+```
+
+# Participant Characteristics
+```{r}
+data <- data %>%
+    rename(Practice = demographic_1_practice,
+           Role = demographic_2_role,
+           Age = demographic_3_age,
+           Gender = demographic_6_gender,
+           Transgender = demographic_8_transgender,
+           Disability = demographic_9_disability,
+           Residency = demographic_residency)
+
+# Factor and set levels for demographic questions
+# Modify Gender, Transgender, and Disability
+data <- data %>%
+  mutate(Gender = factor(Gender,
+                           levels = c("Woman", "Man",
+                                      "Nonbinary/Gender Non-Conforming",
+                                      "Other (please specify)",
+                                      "Prefer not to answer")),
+         Transgender = factor(Transgender,
+                                levels = c("Yes", "No",
+                                           "Prefer not to answer")),
+         Disability = factor(Disability,
+                               levels = c("Yes", "No",
+                                          "Prefer not to answer")))
+
+# Modify Role values to shorten the display of "Clinician/Provider"
+data %<>%
+  mutate(Role = ifelse(Role == "Clinician/Provider (medical, behavioral health, pharmacy)", 
+                       "Clinician/Provider", Role))
+
+# Set anyone who did not respond to Role as unknown, otherwise they don't get
+# counted
+if (sum(is.na(data$Role)) != 0) {
+  data %<>%
+    mutate(Role = fct_na_value_to_level(Role, level = "Unknown"))
+}
+
+
+# Modify time at clinic for displaying in tables and set the levels
+data %<>%
+  mutate(`Time at clinic` = factor(time_at_clinic,
+                                 levels = c('less than 1 year',
+                                            '1-5 years',
+                                            'longer than 5 years')))
+
+if (sum(is.na(data$`Time at clinic`)) != 0) {
+  data %<>%
+    mutate(`Time at clinic` = fct_na_value_to_level(`Time at clinic`, 
+                                                    level = "Unknown"))
+}
+
+# Set a vector of the race & ethnicity variables to facilitate selecting columns
+# Use the un factored columns because they are coded as 0 or 1 instead of
+# Checked/Unchecked. Do not include 'other' because it contains free text.
+race_vars <- names(data %>%
+                     select(starts_with("demographic") &
+                              contains("race") &
+                              !contains(".factor") &
+                              !contains("other")))
+```
+
+```{r}
+# Convert NAs to explicit values for tabulation
+data %<>%
+  mutate(across(c(Age, Gender, Disability),
+                ~ fct_na_value_to_level(., level = "Unknown")))
+```
+
+```{r}
+data %>%
+  select(Role,
+         `Time at clinic`,
+         Age,
+         Gender,
+         Transgender,
+         Disability,
+         all_of(race_vars)) %>%
+  drop_na(Role) %>%
+  tbl_summary(by = "Role",
+              label = list(
+                demographic_4_race___1 = "American Indian / Alaska Native",
+                demographic_4_race___2 = "Asian",
+                demographic_4_race___3 = "Black or African American",
+                demographic_4_race___4 = "White",
+                demographic_4_race___5 = "Hispanic or Latino",
+                demographic_4_race___6 = "Another race",
+                demographic_4_race___8 = "Prefer not to answer")) %>%
+  add_overall() %>%
+  bold_labels() %>%
+  modify_header(label = "Participant Characteristics") %>%
+  as_gt()
+```
+
+
+```{r}
+freq_prop_tab <- function(df) {
+  #' freq_prop_tab
+  #'
+  #' Returns a gt_summary() table of columns with categorical responses. This
+  #' function was designed to display Likert type responses. It requires the
+  #' the labels data frame in the global environment to change the display of
+  #' column headers as labels instead of the redcap fields
+  #'
+  #' @param df a dataframe that has only the columns of interest to tabulate
+
+  vars <- names(df)
+
+  var_labs <- labels %>% select(all_of(vars)) %>% as.character()
+
+  # Draft code of trying to set unknown to columns that have missing only
+  # set_unknown <- function(var) {
+  #   
+  #   n_missing <- df %>%
+  #     select(var) %>%
+  #     filter(var) %>%
+  #     nrow()
+  #   
+  #   if (n_missing > 0) {
+  #     df %<>% 
+  #       mutate(var = fct_na_value_to_level(var, level = "Unknown"))
+  #     
+  #   }
+  # }
+  # 
+  # df %>%
+  #   mutate(across(everything(), ~ set_unknown(!!sym(.))))
+  
+  tab <- df %>%
+    mutate(across(everything(), ~ fct_na_value_to_level(., level = "Unknown"))) %>%
+    rename_at(all_of(vars), ~ var_labs) %>%
+    tbl_summary() %>%
+    bold_labels() %>%
+    modify_header(label = "") %>%
+    as_gt()
+
+  return(tab)
+}
+```
+
+
+# Q1: In your opinion, how much of a problem are health inequities
+```{r}
+data %>%
+  select(hi_problems_q1:hi_problems_q3) %>%
+  freq_prop_tab(.)
+```
+
+
+# Q2: Among patients at your clinic, how much do you think each of the following contributes to health inequities?
+```{r}
+data %>%
+  select(hi_clinic_q1:hi_clinic_q4, hi_clinic_implicit) %>%
+  freq_prop_tab(.)
+```
+
+
+# Q3: How important is it to you to address health inequities within your clinic?
+```{r}
+data %>%
+  select(hi_individual_q1) %>%
+  freq_prop_tab()
+```
+
+## Why is it "not important at all" or "slightly important" to address health inequities within your clinic?
+```{r}
+# Display table only if there are responses to display
+# Westminster 2024 will not have any responses to display
+n_responses <- data %>%
+  filter(hi_individual_q1 %in% c("Not important at all", 
+                                 "Slightly important")) %>%
+  nrow()
+
+if (n_responses != 0) {
+data %>%
+  filter(hi_individual_q1 %in% c("Not important at all", 
+                                 "Slightly important")) %>%
+  select(hi_individual_q2) %>%
+  freq_prop_tab()
+} else {
+  data.frame(`No responses available` = '') %>% gt::gt()
+}
+```
+
+<!-- If there are responses, then display them . -->
+```{r}
+n_responses <- data %>%
+  select(hi_individual_q3) %>%
+  drop_na() %>%
+  nrow()
+```
+
+`r if(n_responses != 0){'## Other (please specify):'}`
+```{r}
+if(n_responses != 0) {
+  show_table <- TRUE
+} else {
+  show_table <- FALSE
+}
+```
+
+```{r, eval=show_table}
+# Only one responded to this question, most clinics will not have data for this
+# question
+data %>%
+  select(hi_individual_q3) %>%
+  drop_na() %>%
+  gt::gt()
+```
+
+
+# Q4: How important is it to your clinic leadership to address health inequities at your clinic?
+```{r}
+data %>%
+  select(hi_clinicleaders_q1) %>%
+  freq_prop_tab()
+```
+
+
+# Q5: Please rate how much you agree or disagree with the following statement:
+```{r}
+data %>%
+  select(meaningful_change) %>%
+  freq_prop_tab()
+```
+
+## Please describe the changes your clinic has made in a few phrases or sentences: Only for those that responded to at least "Agree" above.
+```{r}
+data %>%
+  select(meaningful_change_frsp) %>%
+  drop_na() %>%
+  gt::gt()
+```
+
+
+# Q6: Do you think your clinic focuses on health equity too little, the right amount, or too much?
+```{r}
+data %>%
+  select(clinic_hefocus) %>%
+  freq_prop_tab()
+```
+
+
+# Q7: Have you taken any of the following actions in the last year? (Select all that apply)
+```{r}
+all_apply_tab <- function(df) {
+  #' all_apply_tab
+  #'
+  #' Returns a gt_summary() table of 'select all that apply' type columns
+  #'
+  #' @param df a data frame with consisting of a group of all that apply type
+  #' columns
+
+  vars <- names(df)
+
+  # modify the column header labels for display
+  var_labs <- labels %>%
+    select(all_of(vars)) %>%
+    as.character() %>%
+    str_remove(".*=") %>%           # removes all characters before '='
+    gsub('.{1}$', '', .) %>%        # removes the 1st character from the end ')'
+    str_replace("<br>", '') %>%     # removes the '<br>' if available
+    str_trim()                      # removes any trailing white space
+
+  tab <- df %>%
+  mutate(across(everything(), ~ ifelse(!is.na(.), 1, 0))) %>%
+  rename_at(all_of(vars), ~ var_labs)%>%
+  tbl_summary() %>%
+  modify_header(label = "") %>%
+  as_gt()
+
+  return(tab)
+}
+```
+
+```{r}
+data %>%
+  select(personal_actions_q1___1:personal_actions_q1____66) %>%
+  all_apply_tab()
+```
+
+
+# Q8: Your clinic has access to reports that compare healthcare quality data in our patients between different groups (racial/ethnic groups, type of insurance, and whether or not they need an interpreter).
+This allows our clinics to identify health inequities among their patients. Please describe your experience with these reports
+```{r}
+data %>%
+  select(dash_aware) %>%
+  freq_prop_tab()
+```
+
+
+## We would like to understand how these reports have impacted staff and providers in our family medicine clinics. Please select any statements that you agree with. (Select all that apply) Only for those that responded to at least seeing the data.
+```{r}
+data %>%
+  filter(dash_aware %in% c('I knew they existed and have seen the data.',
+                           'I knew they existed, have seen the data, and have used at least some of the data to shape local operations or clinical work.')) %>%
+  select(dash_uses___1:dash_uses___5) %>%
+  all_apply_tab()
+```
+
+
+# Q9: Every clinic has strengths and challenges when it comes to making changes for health equity.
+```{r}
+data %>%
+  select(sw_skills:sw_clinicianavail) %>%
+  freq_prop_tab()
+```
+
+
+
+
+
+
+
+# Q10: Among patients at your clinic, do you think that any of the following groups experience worse health than that of Colorado residents in general? (Select all that apply)
+```{r}
+data %>%
+  select(hi_race_q1___1:hi_race_q1____67) %>%
+  all_apply_tab()
+```
+
+
+<!-- If there are responses, then display them . -->
+```{r}
+n_responses <- data %>%
+  select(hi_race_frsp1) %>%
+  drop_na() %>%
+  nrow()
+```
+
+`r if(n_responses != 0){'## Other race/ethnicity (please specify)'}`
+```{r}
+if(n_responses != 0) {
+  show_table <- TRUE
+} else {
+  show_table <- FALSE
+}
+```
+
+```{r, eval=show_table}
+data %>%
+  select(hi_race_frsp1) %>%
+  drop_na() %>%
+  gt::gt()
+```
+
+<!-- If there are responses, then display them . -->
+```{r}
+n_responses <- data %>%
+  select(hi_race_frsp2) %>%
+  drop_na() %>%
+  nrow()
+```
+
+`r if(n_responses != 0){'## Other'}`
+```{r}
+if(n_responses != 0) {
+  show_table <- TRUE
+} else {
+  show_table <- FALSE
+}
+```
+
+```{r, eval=show_table}
+data %>%
+    select(hi_race_frsp2) %>%
+    drop_na() %>%
+    gt::gt()
+```
+
+
+# Q11: Overall, how confident are you in your ability to provide the same quality of care to patients with disability as you provide to patients without disability.
+```{r}
+data %>%
+  select(confidence_disability) %>%
+  freq_prop_tab()
+```
+
+
+
+# Q12: Please tell us how much each of the following is a barrier for you in caring for patients with disability...?
+```{r}
+data %>%
+  select(disability_time:disability_other) %>%
+  freq_prop_tab()
+```
+
+<!-- If there are responses, then display them . -->
+```{r}
+n_responses <- data %>%
+  select(barriers_frsp) %>%
+  drop_na() %>%
+  nrow()
+```
+
+`r if(n_responses != 0){'## Please specify if "Something else" is selected.'}`
+```{r}
+if(n_responses != 0) {
+  show_table <- TRUE
+} else {
+  show_table <- FALSE
+}
+```
+
+```{r, eval=show_table}
+data %>%
+  select(barriers_frsp) %>%
+  drop_na() %>%
+  gt::gt()
+```
+
+
+# Q13: Please rate how much you agree or disagree with the following statements:
+```{r}
+data %>%
+  select(org_awareness:org_collab) %>%
+  freq_prop_tab()
+```
+
+
+# Q14: Are there people or organizations in the community, at UCH, or at the University of Colorado that could be partners to try to address health inequities among patients at your clinic?
+```{r}
+data %>%
+  select(hi_partners_q1) %>%
+  drop_na() %>%
+  gt::gt()
+```
+
+
