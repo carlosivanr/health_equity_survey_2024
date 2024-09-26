@@ -3,7 +3,7 @@
 # All, AF Williams, Boulder, Lone Tree, Westminster, WISH
 # Options do not need to be in quotes
 params:
-  clinic: "All"
+  clinic: "WISH"
     
 title: "DFM Health Equities Survey 2024"
 subtitle: "`r params$clinic`"
@@ -15,7 +15,7 @@ format:
   docx:
     toc: true
     reference-doc: "../qmd_reference/custom-reference-doc.docx"
-    output-file: All.docx
+    output-file: report.docx
   
 editor: source
   
@@ -136,8 +136,6 @@ colnames(labels) <- new_col_names
 ```
 
 ```{r}
-
-
 # Set columns to factor and order the levels
 # Q1:
 data %<>%
@@ -162,7 +160,6 @@ data %<>%
                 ~ fct_collapse(., `Very much/Extremely` = c("Very much", "Extremely"))))
 
   
-
 # Q3.1, Q4
 data %<>%
   mutate(across(c(hi_individual_q1, hi_clinicleaders_q1),
@@ -451,127 +448,60 @@ data %>%
 ```
 
 ```{r}
-data %>%
-  select(Role, hi_problems_q1) %>%
-  freq_prop_tab(.)
-```
+q1_plot <- function(var, label) {
+  overall <-
+    data %>% 
+    select(Role, sym(var)) %>% 
+    mutate(Role = 'Overall') %>%
+    group_by(Role, !!sym(var)) %>%
+    summarise(Frequency = n(), .groups = "drop") %>%
+    mutate(Proportion = Frequency/nrow(data))
 
-```{r}
-overall <-
-  data %>% 
-  select(Role, hi_problems_q1) %>% 
-  mutate(Role = 'Overall') %>%
-  group_by(Role, hi_problems_q1) %>%
-  summarise(Frequency = n(), .groups = "drop") %>%
-  mutate(Proportion = Frequency/nrow(data))
-
-
-n_group <- data %>%
-  select(Role, hi_problems_q1) %>%
-  group_by(Role) %>%
-  summarise(n_group = n())
+  n_group <- data %>%
+    select(Role, sym(var)) %>%
+    group_by(Role) %>%
+    summarise(n_group = n())
+    
+  role <- 
+    data %>% 
+    select(Role, sym(var)) %>%
+    group_by(Role, !!sym(var)) %>%
+    summarise(Frequency = n(), .groups = "drop")
   
-role <- 
-  data %>% 
-  select(Role, hi_problems_q1) %>%
-  group_by(Role, hi_problems_q1) %>%
-  summarise(Frequency = n(), .groups = "drop")
-
-left_join(role, n_group, by = "Role") %>%
-  mutate(Proportion = Frequency/n_group) %>%
-  select(-n_group) %>%
-  bind_rows(., overall) %>%
-  filter(hi_problems_q1 != "Unknown") %>%
-  mutate(Role = factor(Role, levels = c("Unknown Role", "Staff", "Clinician/Provider", "Overall"))) %>%
-  ggplot(aes(x = hi_problems_q1, y = Proportion, fill = Role)) +
-  geom_col(alpha = 0.8, position = position_dodge2(width = 0.9, preserve = "single")) +
-  theme_minimal()+
-  scale_fill_brewer(type = "qual", palette = 2) +
-  scale_y_continuous(labels = scales::percent,
-                     limits = c(0,1)) +
-  labs(y = "Percentage", x = "", title = "In the United States?") +
-  coord_flip() +
-  theme(legend.position = "top") +
-  guides(fill = guide_legend(title = "", reverse = TRUE))
-```
-
-
-```{r}
-
-```
-
-
-```{r, fig.width=6.5, dpi = 600}
-overall <- data %>% select(Role, hi_problems_q1) %>% mutate(Role = 'Overall')
-role <- data %>% select(Role, hi_problems_q1)
-
-bind_rows(role, overall) %>%
-  mutate(Role = factor(Role, levels = c('Overall', 'Clinician/Provider', 'Staff', 'Unknown'))) %>%
-  ggplot(aes(x = hi_problems_q1, fill = Role, by = Role, y = after_stat(prop))) +
-  geom_bar(alpha = 0.8, stat = "prop", position = position_dodge2(width = 0.9, preserve = "single")) +
-  # geom_text(aes(label = round(after_stat(prop) * 100)),
-  #           stat= "prop",
-  #           position = position_dodge2(.9, preserve = 'single'),
-  #           vjust = .4,
-  #           hjust = -.2
-  #           ) +
-  theme_minimal() +
-  scale_fill_brewer(type = "qual", palette = 2) +
-  scale_y_continuous(labels = scales::percent,
-                     limits = c(0,1)) +
-  labs(y = "Percentage", x = "", title = "In the United States?") +
-  coord_flip() +
-  theme(legend.position = "top") +
-  guides(fill = guide_legend(title = ""))
+  left_join(role, n_group, by = "Role") %>%
+    mutate(Proportion = Frequency/n_group) %>%
+    select(-n_group) %>%
+    bind_rows(., overall) %>%
+    filter(sym(var) != "Unknown",
+           Role != "Unknown Role") %>%
+    drop_na(sym(var)) %>%
+    mutate(Role = factor(Role, levels = c("Unknown Role", "Staff", "Clinician/Provider", "Overall"))) %>%
+    ggplot(aes(x = !!sym(var), y = Proportion, fill = Role)) +
+    geom_col(alpha = 0.8, position = position_dodge2(width = 0.9, preserve = "single")) +
+    theme_minimal()+
+    scale_fill_brewer(type = "qual", palette = 2) +
+    scale_y_continuous(labels = scales::percent,
+                       limits = c(0,1)) +
+    labs(y = "Percentage", x = "", title = label) +
+    coord_flip() +
+    theme(legend.position = "top") +
+    guides(fill = guide_legend(title = "", reverse = TRUE))
+}
 ```
 
 ```{r, fig.width=6.5, dpi = 600}
-overall <- data %>% select(Role, hi_problems_q2) %>% mutate(Role = 'Overall')
-role <- data %>% select(Role, hi_problems_q2)
+q1_plot('hi_problems_q1', label = 'In the United States')
+```
 
-bind_rows(role, overall) %>%
-  mutate(Role = factor(Role, levels = c('Overall', 'Clinician/Provider', 'Staff', 'Unknown'))) %>%
-  ggplot(aes(x = hi_problems_q2, fill = Role, by = Role, y = after_stat(prop))) +
-  geom_bar(alpha = 0.8, stat = "prop", position = position_dodge2(width = 0.9, preserve = "single")) +
-  # geom_text(aes(label = round(after_stat(prop) * 100)),
-  #           stat= "prop",
-  #           position = position_dodge2(.9, preserve = 'single'),
-  #           vjust = .4,
-  #           hjust = -.2
-  #           ) +
-  theme_minimal() +
-  scale_fill_brewer(type = "qual", palette = 2) +
-  scale_y_continuous(labels = scales::percent,
-                     limits = c(0,1)) +
-  labs(y = "Percentage", x = "", title = "In the UC Health System?") +
-  coord_flip() +
-  theme(legend.position = "top") +
-  guides(fill = guide_legend(title = ""))
+
+
+
+```{r, fig.width=6.5, dpi = 600}
+q1_plot('hi_problems_q2', label = 'In the UC Health System?')
 ```
 
 ```{r, fig.width=6.5, dpi = 600}
-overall <- data %>% select(Role, hi_problems_q3) %>% mutate(Role = 'Overall')
-role <- data %>% select(Role, hi_problems_q3)
-
-bind_rows(role, overall) %>%
-  mutate(hi_problems_q3 = fct_na_value_to_level(hi_problems_q3, level = "Unknown")) %>%
-  mutate(Role = factor(Role, levels = c('Overall', 'Clinician/Provider', 'Staff', 'Unknown'))) %>%
-  ggplot(aes(x = hi_problems_q3, fill = Role, by = Role, y = after_stat(prop))) +
-  geom_bar(alpha = 0.8, stat = "prop", position = position_dodge2(width = 0.9, preserve = "single")) +
-  # geom_text(aes(label = round(after_stat(prop) * 100)),
-  #           stat= "prop",
-  #           position = position_dodge2(.9, preserve = 'single'),
-  #           vjust = .4,
-  #           hjust = -.2
-  #           ) +
-  theme_minimal() +
-  scale_fill_brewer(type = "qual", palette = 2) +
-  scale_y_continuous(labels = scales::percent,
-                     limits = c(0,1)) +
-  labs(y = "Percentage", x = "", title = "In your clinic?") +
-  coord_flip() +
-  theme(legend.position = "top") +
-  guides(fill = guide_legend(title = ""))
+q1_plot('hi_problems_q3', label = 'In your clinic?')
 ```
 
 
@@ -771,6 +701,7 @@ bind_cols(df, data.frame(Role = data$Role)) %>%
                            vars[7] ~ var_labs[7])
               ) %>%
   modify_header(label = "") %>%
+  add_overall() %>%
   as_gt()
 ```
 
@@ -806,7 +737,8 @@ role <- data %>%
 
 ```{r, fig.width=6.5}
 bind_rows(overall, role) %>%
-  mutate(Role = factor(Role, levels = c("Overall", "Clinician/Provider", "Staff", "Unknown"))) %>%
+  filter(Role != "Unknown Role") %>%
+  mutate(Role = factor(Role, levels = rev(c("Overall", "Clinician/Provider", "Staff")))) %>%
   mutate(Question = fct_collapse(factor(Question),
                                "Health equity training" = "personal_actions_q1___1",
                                "Informal opportunities" = "personal_actions_q1___2",
@@ -830,7 +762,8 @@ bind_rows(overall, role) %>%
   #           vjust = 0.4,
   #           hjust = -0.5) +
   scale_y_continuous(labels = scales::percent,
-                     limits = c(0,1)) +  guides(fill = guide_legend(title = "")) +
+                     limits = c(0,1)) +  
+  guides(fill = guide_legend(title = "", reverse = TRUE)) +
   scale_fill_brewer(type = "qual", palette = 2) +
   labs(x = "") +
   theme_minimal() +
@@ -840,7 +773,7 @@ bind_rows(overall, role) %>%
 ```{r, eval = FALSE}
 # Chack how many rows of unknown in pa q1_4
 data %>%
-  filter(Role == 'Unknown') %>%
+  filter(Role == 'Unknown Role') %>%
   select(personal_actions_q1___4)
 ```
 
@@ -916,6 +849,7 @@ bind_cols(df, role) %>%
                            vars[5] ~ var_labs[5])
               ) %>%
   modify_header(label = "") %>%
+  add_overall() %>%
   as_gt()
 ```
 
@@ -927,74 +861,71 @@ data %>%
   freq_prop_tab()
 ```
 
+```{r, fig.width=6.5, dpi = 600}
+q9_plot <- function(sw, title) {
+  # A vector of the new column names to display as labels
+  new_col_names <- c(
+    "KnowledgeSkills",
+    "ClinicCulture",
+    "UCHCulture",
+    "InequityAwareness",
+    "Desire",
+    "DedicatedTime",
+    "Money",
+    "Leadership",
+    "Relationships",
+    "StaffAvailability",
+    "ClinicianAvailability")
+  
+  # Set the new column names
+  colnames(sw) <- new_col_names
+  
+  # Get the index to order the divergent bars by proportion of strength 
+  # responses
+  index <- sw %>% 
+  mutate(across(everything(), ~ ifelse(. == "Strength", 1, 0))) %>%
+  mutate(across(everything(), ~ ifelse(is.na(.), 0, .))) %>%
+  colSums() %>%
+  order(decreasing = TRUE)
+  
+  # Get the column order using the names of the input data frame after indexing
+  col_order <- names(sw)[index] 
+  
+  # Convert input data to a plain dataframe
+  sw <- data.frame(sw)
+
+  # Create a likert object
+  likert_sw <- likert::likert(sw)
+
+  # Plot the likert object using the col_order
+  plot(likert_sw, group.order = col_order) +
+    # scale_fill_manual(values = rev(RColorBrewer::brewer.pal(n = 3, "RdBu"))) +
+    labs(title = title) +
+    theme_minimal() +
+    theme(legend.position = "bottom")
+}
+```
 
 
 ```{r, fig.width=6.5, dpi = 600}
-# Select the columns
-sw <- data %>%
-  select(sw_skills:sw_clinicianavail)
-
-new_col_names <- c("KnowledgeSkills",
-               "ClinicCulture",
-                "UCHCulture",
-                "InequityAwareness",
-                "Desire",
-                "DedicatedTime",
-                "Money",
-                "Leadership",
-                "Relationships",
-                "StaffAvailability",
-                "ClinicianAvailability")
-
-colnames(sw) <- new_col_names
-
-# Convert to plain dataframe
-sw <- data.frame(sw)
-
-likert_sw <- likert::likert(sw)
-
-plot(likert_sw) +
-# plot(likert_sw, group.order = new_col_names) +
-  # scale_fill_manual(values = rev(RColorBrewer::brewer.pal(n = 3, "RdBu"))) +
-  labs(title = "Overall") +
-  theme_minimal() +
-  theme(legend.position = "right")
+data %>%
+  select(sw_skills:sw_clinicianavail) %>%
+  q9_plot(., "Overall")
 ```
 
 ```{r, fig.width=6.5, dpi = 600}
 # Select the columns
-sw <- data %>%
+data %>%
   filter(Role == "Clinician/Provider") %>%
-  select(sw_skills:sw_clinicianavail)
-
-colnames(sw) <- new_col_names
-
-# Convert to plain dataframe
-sw <- data.frame(sw)
-
-likert_sw <- likert::likert(sw)
-
-plot(likert_sw, group.order = new_col_names) +
-  labs(title = "Clinician/Provider") +
-  theme_minimal() +
-  theme(legend.position = "bottom")
+  select(sw_skills:sw_clinicianavail) %>%
+  q9_plot(., "Clinician/Provider")
 ```
+
 ```{r, fig.width=6.5, dpi = 600}
-sw <- data %>%
+data %>%
   filter(Role == "Staff") %>%
-  select(sw_skills:sw_clinicianavail)
-
-colnames(sw) <- new_col_names
-
-# Convert to plain dataframe
-sw <- data.frame(sw)
-
-likert_sw <- likert::likert(sw)
-
-plot(likert_sw, group.order = new_col_names) +
-  labs(title = "Staff") +
-  theme_minimal() +
-  theme(legend.position = "bottom")
+  select(sw_skills:sw_clinicianavail) %>%
+  q9_plot(., "Staff")
 ```
 
 
@@ -1064,6 +995,7 @@ bind_cols(df, data.frame(Role = data$Role)) %>%
                            vars[11] ~ var_labs[11],
                            vars[12] ~ var_labs[12])
               ) %>%
+  add_overall() %>%
   modify_header(label = "") %>%
   as_gt()
 ```

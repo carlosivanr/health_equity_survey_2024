@@ -1,0 +1,13 @@
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+/renv
+/scripts/2022_files/
+.Rprofile
+
+*.Rproj
+
+*.docx
+*.xlsx
+*.ppt
