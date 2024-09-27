@@ -116,7 +116,6 @@ rm(data_raw, data_lab)
 col_labs <- names(
   (pull_report('128507', 'raw', 'label') %>% select(-(contains("Clinic Name"))))
   )
-
 ```
 
 ```{r}
@@ -225,7 +224,6 @@ response rate per clinic, since those that did not respond would not have a
 clinic value to filter. -->
 
 `r if(params$clinic == "All"){'# Response Rate'}`
-
 ```{r}
 if(params$clinic == "All") {
   show_response_rate <-  TRUE
@@ -248,14 +246,6 @@ data %<>%
 ```
 
 ```{r}
-# if (params$clinic == "AFWilliams") {
-#   clinic_name <- "AF Williams"
-# } else if (params$clinic == "LoneTree") {
-#     clinic_name <- "Lone Tree"
-# } else {
-#   clinic_name <- params$clinic
-# }
-
 # filter data to clinic level
 if (params$clinic != 'All') {
   data %<>%
@@ -439,7 +429,6 @@ freq_prop_tab <- function(df) {
 }
 ```
 
-
 # Q1: In your opinion, how much of a problem are health inequities
 ```{r}
 data %>%
@@ -449,6 +438,21 @@ data %>%
 
 ```{r}
 q1_plot <- function(var, label) {
+  #' generate q1_plot
+  #'
+  #' Creates a flipped, clustered bar chart for the hi_problems_q1 through 
+  #' hi_problems_q3 sub questions in Q1. References the "data" data frame from
+  #' the global environment
+  #'
+  #' @param var a quoted string for selecting the column to be plotted 
+  #'  hi_problems_q1, hi_problems_q3, or hi_problems_q3
+  #' @param label a quoted string to use as the plot title
+  
+  
+  # Create a data frame for calculating the frequencies and proportions for all
+  # available responses. Role is renamed as Overall so that the data can be
+  # stacked in long format with the role data frame to plot both the overall and
+  # role specific responses in one figure.
   overall <-
     data %>% 
     select(Role, sym(var)) %>% 
@@ -457,17 +461,24 @@ q1_plot <- function(var, label) {
     summarise(Frequency = n(), .groups = "drop") %>%
     mutate(Proportion = Frequency/nrow(data))
 
+  # Create a data frame with the frequencies of participants by Role, these will
+  # be used as the Role specific denominators
   n_group <- data %>%
     select(Role, sym(var)) %>%
     group_by(Role) %>%
     summarise(n_group = n())
-    
+
+  # Create a data set of frequencies after grouping by role and response.
   role <- 
     data %>% 
     select(Role, sym(var)) %>%
     group_by(Role, !!sym(var)) %>%
     summarise(Frequency = n(), .groups = "drop")
   
+  # Merge role and and n_group to calculate frequencies and proportions broken
+  # out by role. Then remove n_group so that it can be stacked with the overall
+  # data frame that contains the overall responses. n.b. does not plot those
+  # that either had an Unknown Role or an Unknown response
   left_join(role, n_group, by = "Role") %>%
     mutate(Proportion = Frequency/n_group) %>%
     select(-n_group) %>%
@@ -475,13 +486,15 @@ q1_plot <- function(var, label) {
     filter(sym(var) != "Unknown",
            Role != "Unknown Role") %>%
     drop_na(sym(var)) %>%
-    mutate(Role = factor(Role, levels = c("Unknown Role", "Staff", "Clinician/Provider", "Overall"))) %>%
+    mutate(Role = factor(Role, levels = c("Unknown Role", 
+                                          "Staff", "Clinician/Provider", 
+                                          "Overall"))) %>%
     ggplot(aes(x = !!sym(var), y = Proportion, fill = Role)) +
-    geom_col(alpha = 0.8, position = position_dodge2(width = 0.9, preserve = "single")) +
+    geom_col(alpha = 0.8, 
+             position = position_dodge2(width = 0.9, preserve = "single")) +
     theme_minimal()+
     scale_fill_brewer(type = "qual", palette = 2) +
-    scale_y_continuous(labels = scales::percent,
-                       limits = c(0,1)) +
+    scale_y_continuous(labels = scales::percent, limits = c(0,1)) +
     labs(y = "Percentage", x = "", title = label) +
     coord_flip() +
     theme(legend.position = "top") +
@@ -493,9 +506,6 @@ q1_plot <- function(var, label) {
 q1_plot('hi_problems_q1', label = 'In the United States')
 ```
 
-
-
-
 ```{r, fig.width=6.5, dpi = 600}
 q1_plot('hi_problems_q2', label = 'In the UC Health System?')
 ```
@@ -503,7 +513,6 @@ q1_plot('hi_problems_q2', label = 'In the UC Health System?')
 ```{r, fig.width=6.5, dpi = 600}
 q1_plot('hi_problems_q3', label = 'In your clinic?')
 ```
-
 
 
 # Q2: Among patients at your clinic, how much do you think each of the following contributes to health inequities?
@@ -520,8 +529,6 @@ data %>%
   select(Role, hi_individual_q1) %>%
   freq_prop_tab()
 ```
-
-
 
 ```{r}
 # Display table only if there are responses to display
@@ -610,62 +617,6 @@ data %>%
 
 # Q7: Have you taken any of the following actions in the last year? (Select all that apply)
 ```{r}
-all_apply_tab <- function(df, sort = FALSE) {
-  #' all_apply_tab
-  #'
-  #' Returns a gt_summary() table of 'select all that apply' type columns
-  #'
-  #' @param df a data frame with consisting of a group of all that apply type
-  #' columns
-
-  vars <- names(df)
-
-  # modify the column header labels for display
-  var_labs <- labels %>%
-    select(all_of(vars)) %>%
-    as.character() %>%
-    str_remove(".*=") %>%           # removes all characters before '='
-    gsub('.{1}$', '', .) %>%        # removes the 1st character from the end ')'
-    str_replace("<br>", '') %>%     # removes the '<br>' if available
-    str_trim()                      # removes any trailing white space
-  
-  # Factor 
-  
-  if (sort == TRUE) {
-    
-    df <- df %>%
-    mutate(across(everything(), ~ ifelse(!is.na(.), 1, 0)))
-    
-    df_names <- names(df)
-
-    index <- df %>% 
-    colSums() %>%
-    order(decreasing = TRUE)
-
-    ordered_names <- df_names[index]
-    
-    tab <-  df %>%
-      select(all_of(ordered_names)) %>%
-      rename_at(all_of(vars), ~ var_labs)%>%
-      tbl_summary() %>%
-      modify_header(label = "") %>%
-      as_gt()
-    
-  } else {
-
-    tab <- df %>%
-    mutate(across(everything(), ~ ifelse(!is.na(.), 1, 0))) %>%
-    rename_at(all_of(vars), ~ var_labs)%>%
-    tbl_summary() %>%
-    modify_header(label = "") %>%
-    as_gt()
-  }
-  
-  return(tab)
-}
-```
-
-```{r}
 df <- data %>%
   select(personal_actions_q1___1:personal_actions_q1____66) %>%
     mutate(across(everything(), ~ ifelse(!is.na(.), 1, 0)),
@@ -734,7 +685,6 @@ role <- data %>%
   select(-n_group)
 ```
 
-
 ```{r, fig.width=6.5}
 bind_rows(overall, role) %>%
   filter(Role != "Unknown Role") %>%
@@ -770,6 +720,7 @@ bind_rows(overall, role) %>%
   theme(legend.position = "top") +
   coord_flip()
 ```
+
 ```{r, eval = FALSE}
 # Chack how many rows of unknown in pa q1_4
 data %>%
@@ -790,14 +741,6 @@ data %>%
 
 
 ## We would like to understand how these reports have impacted staff and providers in our family medicine clinics. Please select any statements that you agree with. (Select all that apply) Only for those that responded to at least seeing the data.
-```{r}
-# data %>%
-#   filter(dash_aware %in% c('I knew they existed and have seen the data.',
-#                            'I knew they existed, have seen the data, and have used at least some of the data to shape local operations or clinical work.')) %>%
-#   select(dash_uses___1:dash_uses___5) %>%
-#   all_apply_tab()
-```
-
 ```{r}
 df <- data %>%
   filter(dash_aware %in% c('I knew they existed and have seen the data.',
@@ -863,6 +806,15 @@ data %>%
 
 ```{r, fig.width=6.5, dpi = 600}
 q9_plot <- function(sw, title) {
+  #' generate q9_plots
+  #'
+  #' Creates a divergent bar chart for the sw_* select all that apply questions
+  #'
+  #' @param sw a data frame consisting of all the sw_* questions. Will break if
+  #'  not all columns are included. Data can be filtered by Role or other 
+  #'  demographic variable
+  #' @param title a quoted string to use as the plot title
+  
   # A vector of the new column names to display as labels
   new_col_names <- c(
     "KnowledgeSkills",
@@ -882,11 +834,11 @@ q9_plot <- function(sw, title) {
   
   # Get the index to order the divergent bars by proportion of strength 
   # responses
-  index <- sw %>% 
-  mutate(across(everything(), ~ ifelse(. == "Strength", 1, 0))) %>%
-  mutate(across(everything(), ~ ifelse(is.na(.), 0, .))) %>%
-  colSums() %>%
-  order(decreasing = TRUE)
+  index <- sw %>%
+    mutate(across(everything(), ~ ifelse(. == "Strength", 1, 0))) %>%
+    mutate(across(everything(), ~ ifelse(is.na(.), 0, .))) %>%
+    colSums() %>%
+    order(decreasing = TRUE)
   
   # Get the column order using the names of the input data frame after indexing
   col_order <- names(sw)[index] 
@@ -899,13 +851,11 @@ q9_plot <- function(sw, title) {
 
   # Plot the likert object using the col_order
   plot(likert_sw, group.order = col_order) +
-    # scale_fill_manual(values = rev(RColorBrewer::brewer.pal(n = 3, "RdBu"))) +
     labs(title = title) +
     theme_minimal() +
     theme(legend.position = "bottom")
 }
 ```
-
 
 ```{r, fig.width=6.5, dpi = 600}
 data %>%
@@ -914,7 +864,6 @@ data %>%
 ```
 
 ```{r, fig.width=6.5, dpi = 600}
-# Select the columns
 data %>%
   filter(Role == "Clinician/Provider") %>%
   select(sw_skills:sw_clinicianavail) %>%
@@ -931,17 +880,9 @@ data %>%
 
 # Q10: Among patients at your clinic, do you think that any of the following groups experience worse health than that of Colorado residents in general? (Select all that apply)
 ```{r}
-# data %>%
-#   select(hi_race_q1___1:hi_race_q1____67) %>%
-#   all_apply_tab(., sort = TRUE)
-```
-
-```{r}
 df <- data %>%
     select(hi_race_q1___1:hi_race_q1____67) %>%
-    mutate(across(everything(), ~ ifelse(!is.na(.), 1, 0)),
-           # across(everything(), ~ factor(., levels = c("0", "1")))
-           )
+    mutate(across(everything(), ~ ifelse(!is.na(.), 1, 0)))
 
 df_names <- names(df)
 
@@ -954,7 +895,6 @@ ordered_names <- df_names[index]
 df %<>%
   select(all_of(ordered_names)) %>%
   mutate(across(everything(), ~ factor(., levels = c("0", "1"))))
-
 
 vars <- names(df)
 
@@ -1063,7 +1003,6 @@ data %>%
   select(Role, confidence_disability) %>%
   freq_prop_tab()
 ```
-
 
 
 # Q12: Please tell us how much each of the following is a barrier for you in caring for patients with disability...?

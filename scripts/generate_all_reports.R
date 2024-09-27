@@ -9,7 +9,7 @@ pacman::p_load(tidyverse,
                here,
                furrr)
 
-# Set the input clinics, output format parameters, and number of cores ----
+# Set the input clinics, output format parameters, and number of cores ---------
 clinics = c("AF Williams", "Boulder", "Lone Tree", "Westminster", "WISH", "All")
 format = "docx"
 cores = 5
