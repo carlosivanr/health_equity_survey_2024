@@ -11,5 +11,9 @@
 *.docx
 *.xlsx
 *.ppt
+*.pptx
+*.csv
+*.zip
+*.md
 .vscode/settings.json
 .gitignore

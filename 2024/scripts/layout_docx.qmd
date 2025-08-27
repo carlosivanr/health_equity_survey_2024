@@ -1,0 +1,393 @@
+---
+# Clinic parameter options are: 
+# All, AF Williams, Boulder, Lone Tree, Westminster, WISH
+# Options do not need to be in quotes
+params:
+  clinic: All
+    
+title: "DFM Health Equities Survey 2024"
+subtitle: "`r params$clinic`"
+date: "`r format(Sys.time(), '%B %d %Y')`"
+
+# Quarto docx settings ---------------------------------------------------------
+# fig height, width, and dpi set to prevent overplotting and image quality
+format:
+  docx:
+    toc: true
+    output-file: test.docx
+  
+editor: source
+  
+execute: 
+  echo: false
+  warning: false
+---
+
+```{r load libraries}
+#| echo: false
+#| warning: false
+pacman::p_load(here,
+               tidyverse,
+               gtsummary,
+               bstfun,
+               Hmisc,
+               flextable)
+
+# Suppress summarise warnings
+# options(dplyr.summarise.inform = FALSE) 
+```
+
+```{r source process data}
+# Source in RMD has to be relative to the script
+# source(here::here("scripts", "process_data.R"))
+
+# 2024
+# Should load the data either as a master file data_2024_lab for factored
+# responses or data_2024_raw for numerical responses
+source(here::here("scripts", "prep_data.R"))
+data <- data_2024_lab
+```
+
+```{r source project specific functions}
+source(here::here("functions", "practice_equity_functions.R"))
+```
+
+```{r source all purpose functions}
+# source("C:/Users/rodrica2/OneDrive/Sync Files/R_functions/flatten_list_function.R")
+# source("C:/Users/rodrica2/OneDrive/Sync Files/R_functions/fit_flextable_function.R")
+```
+
+```{r subset_data}
+practice <- params$clinic
+# Check to see if a specific clinic was entered into the function. If the 
+  # string "All" is the function input, then the data will not be filtered by
+  # practice.
+if (practice == "All"){
+  temp <- data
+} else {
+  temp <- data %>%
+  filter(demographic_1_practice == practice)
+}
+```
+
+```{r apply report function}
+# report_practice() is a function that takes in as input the practice which
+# is set in the yaml header of the quarto document.
+report_practice(practice)
+```
+
+```{r generate the free response tables}
+# Use the free vars and free names as inputs to the function via map2, assign 
+# to a list to avoid outputting code to the word document
+# fr_tabs <- map2(free_vars, free_names, ~generate_fr_tab(.x, .y))
+```
+
+
+# Response Rate
+\fontspec{Arial}
+```{r}
+# # Subset the data response rate data frame
+# if (practice == "All"){
+#   response_rates <- response_rates %>%
+#     filter(Clinics == "All Clinics")
+# } else {
+#   response_rates <- response_rates %>%
+#     filter(Clinics == params$clinic)
+# }
+# 
+# # Output to table
+# flextable(response_rates) %>% 
+#   autofit()
+# 
+# 
+# # Make a plot of the response rate  
+# ggplot(response_rates, aes(x = Clinics, y = `Response Rate (%)`)) +
+#   geom_col(width = 0.5, fill = "#7997FF") +
+#   coord_flip() +
+#   scale_y_continuous(limits = c(0,100)) +
+#   labs(y = "Response Rate (%)", x = "") +
+#   theme(legend.position = "none") +
+#   theme_minimal()
+
+```
+
+# Participant Characteristics
+```{r demographics}
+as_flex_table(dem.tab)
+```
+
+<br>
+
+```{r resident, message = FALSE, warning=FALSE}
+#| message: false
+#| warning: false
+if (practice == "AF Williams"){
+  tab.residency <- data %>% 
+    filter(Practice == "AF Williams", 
+           Role == "Clinician/Provider") %>%
+    select(Residency) %>%
+    tbl_summary(missing = "no",
+                label = list(Residency = "Yes")) %>%
+    modify_header(label = "Residency status amongst Clinician/Providers") %>%
+    as_gt()
+  tab.residency
+}
+```
+
+\newpage
+
+# Question 1:
+```{r question_1_table}
+table <- as_flex_table(q1.tab.o)
+
+fit_flextable_wordpage(table)
+```
+
+
+```{r question 1 responses by role}
+q1.plot.r
+```
+
+\newpage
+
+# Question 2:
+```{r question_2_table}
+table <- fit_flextable_wordpage(as_flex_table(q2.tab.o))
+#dim(table)
+#table %>% width(width = c(4.4229213, 0.5104070, 0.4964341, 0.5942444, 0.9759931))
+table %>% width(width = c(3.5, 0.875, 0.875, 0.875, 0.875))
+
+```
+
+```{r question_2_plots}
+q2_plots <- flattenlist(q2_plots)
+
+walk(q2_plots, print)
+```
+
+\newpage
+
+# Question 3:
+```{r question_3_plots}
+q3_plots <- flattenlist(q3_plots)
+
+walk(q3_plots, print)
+```
+
+```{r}
+q3_test <- exists("q3.tab.f")
+```
+
+```{asis, echo = q3_test == TRUE}
+## Free Responses
+```
+
+```{r question_3_free_table}
+if(exists("q3.tab.f")){
+  table <- fit_flextable_wordpage(as_flex_table(q3.tab.f))
+  table #%>% width(width = c(6, 1))
+}
+```
+
+\newpage
+
+# Question 4:
+```{r question_4_table}
+table <- fit_flextable_wordpage(as_flex_table(q4.tab.o))
+table %>% width(width = c(6, 1))
+```
+
+
+```{r question 4 responses by role}
+q4_plots <- flattenlist(q4_plots)
+q4_plots[[1]] + xlab("Patient groups and worse health")
+```
+
+```{r}
+q4_test <- exists("q4.tab.f")
+```
+
+```{asis, echo = q4_test == TRUE}
+## Free Responses
+```
+
+```{r question_4_free_table}
+if(exists("q4.tab.f")){
+  fit_flextable_wordpage(
+    as_flex_table(q4.tab.f)
+    )
+}
+```
+
+\newpage
+
+# Question 5:
+```{r question_5_table}
+table <- as_flex_table(q5.tab.o)
+
+fit_flextable_wordpage(table)
+```
+
+```{r question 5 overall responses}
+q5.1_plots <- flattenlist(q5.1_plots)
+q5.1_plots[[1]]
+
+q5.2_plots <- flattenlist(q5.2_plots)
+q5.2_plots[[1]]
+```
+
+```{r}
+q5_test <- exists("q5.tab.f")
+```
+
+```{asis, echo = q5_test == TRUE}
+## Free Responses
+```
+
+```{r question_5_free_table}
+if(exists("q5.tab.f")){
+  fit_flextable_wordpage(
+    as_flex_table(q5.tab.f)
+    )
+}
+```
+
+\newpage
+
+# Question 6:
+```{r question_6_table}
+table <- as_flex_table(q6.tab.o)
+
+fit_flextable_wordpage(table)
+```
+
+```{r question 6 overall responses}
+q6_plots <- flattenlist(q6_plots)
+
+q6_plots[[1]]
+```
+
+\newpage
+
+# Question 7:
+```{r question_7_table}
+table <- fit_flextable_wordpage(as_flex_table(q7.tab.o))
+table %>% width(width = c(4, 1, 1, 1))
+
+```
+
+```{r question 7 responses by role}
+q7_plots <- flattenlist(q7_plots)
+q7_plots[[1]] + xlab("Personal actions taken in the past year")
+```
+
+```{r}
+q7_test <- exists("q7.tab.f")
+```
+
+```{asis, echo = q7_test == TRUE}
+## Free Responses
+```
+
+```{r question_7_free_table}
+if(exists("q7.tab.f")){
+  table <- fit_flextable_wordpage(as_flex_table(q7.tab.f))
+  table #%>% width(width = c(6, 1))
+}
+```
+
+\newpage
+
+# Question 8:
+```{r question_8_table}
+table <- fit_flextable_wordpage(as_flex_table(q8.tab.o))
+#dim(table)
+table %>% width(width = c(4, .75, .75, .75, .75))
+```
+
+```{r question 8 overall responses}
+q8_plots <- flattenlist(q8_plots)
+
+walk(q8_plots, print)
+```
+
+\newpage
+
+```{r}
+q9_test <- exists("q9.tab.f")
+```
+
+```{asis, echo = q9_test == TRUE}
+## Question 9
+```
+
+```{r question_9_free_table}
+if(exists("q9.tab.f")){
+  table <- fit_flextable_wordpage(as_flex_table(q9.tab.f))
+  table #%>% width(width = c(6, 1))
+}
+```
+
+\newpage
+
+# Question 10:
+```{r question_10_table}
+fit_flextable_wordpage(as_flex_table(q10.tab.o))
+```
+
+```{r question 10 responses by role}
+q10_plots <- flattenlist(q10_plots)
+q10_plots[[1]] + xlab("Barriers to addressing health inequities")
+```
+
+```{r}
+q10_test <- exists("q10.tab.f")
+```
+
+```{asis, echo = q10_test == TRUE}
+## Free Responses
+```
+
+```{r question_10_free_table}
+if(exists("q10.tab.f")){
+  table <- fit_flextable_wordpage(as_flex_table(q10.tab.f))
+  table #%>% width(width = c(6, 1))
+}
+```
+
+\newpage
+
+# Question 11:
+```{r question_11_table}
+fit_flextable_wordpage(as_flex_table(q11.tab.o))
+```
+
+```{r question 11 responses by role}
+q11_plots <- flattenlist(q11_plots)
+q11_plots[[1]] + xlab("Clinic strengths")
+```
+
+```{r}
+q11_test <- exists("q11.tab.f")
+```
+
+```{asis, echo = q11_test == TRUE}
+## Free Responses
+```
+
+```{r question_11_free_table}
+if(exists("q11.tab.f")){
+  table <- fit_flextable_wordpage(as_flex_table(q11.tab.f))
+  table #%>% width(width = c(6, 1))
+}
+```
+
+\newpage
+
+# Question 12
+```{r question_12_free_table}
+if(exists("q12.tab.f")){
+  table <- fit_flextable_wordpage(as_flex_table(q12.tab.f))
+  table #%>% width(width = c(6, 1))
+}
+```

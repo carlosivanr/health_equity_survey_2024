@@ -3,9 +3,9 @@
 # All, AF Williams, Boulder, Lone Tree, Westminster, WISH
 # Options do not need to be in quotes
 params:
-  clinic: "AF Williams"
+  clinic: "All"
     
-title: "DFM Health Equities Survey 2024"
+title: "DFM Health Equities Survey 2025"
 subtitle: "`r params$clinic`"
 date: "`r format(Sys.time(), '%B %d %Y')`"
 
@@ -14,8 +14,8 @@ date: "`r format(Sys.time(), '%B %d %Y')`"
 format:
   docx:
     toc: true
-    reference-doc: "../qmd_reference/custom-reference-doc.docx"
-    output-file: report.docx
+    reference-doc: "D:/custom-reference-doc.docx"
+    output-file: report_draft_all.docx
   
 editor: source
   
@@ -24,107 +24,81 @@ execute:
   warning: false
 ---
 
+
+```{r}
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+# Carlos Rodriguez, PhD. CU Anschutz Dept. of Family Medicine
+# DFM Health Equities Surveys 2025
+
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+```
+
 ```{r load libraries}
 library(magrittr, include.only = "%<>%")
-
+library(dfmtbx)
 pacman::p_load(tidyverse,
                gtsummary,
                REDCapR,
                GGally,
                docstring,
+               here,
                install = FALSE)
 ```
 
-```{r pull_data()}
-pull_report <- function(report_id, val_type, header_type) {
+```{r}
+# Credentials files set as an environmental variable. Placed in a central
+# directory to prevent accidentally uploading tokens to GitHub
+path_credential <- Sys.getenv("redcap_credentials")
 
-  #' pull_report
-  #'
-  #' Pulls a pre-specified report from RedCap given a REDCap report ID,
-  #' the value type, and the header type.
-  #'
-  #' @param report_id the redcap report id
-  #' @param val_type responses as 'raw' for numbers or 'label' for character
-  #' @param header_type 'raw' for the redcap field name, 'label' for the text
+# Project 34274 corresponds to REDCap Health Equity Survey 3.0
+project_id <- 34274
 
-  # Credentials files set as an environmental variable. Placed in a central
-  # directory to prevent accidentally uploading tokens to GitHub
-  path_credential <- Sys.getenv("redcap_credentials")
-
-  # Project 28323 corresponds to REDCap Health Equity Survey II
-  project_id <- 28323
-
-  .token <- retrieve_credential_local(
-    path_credential,
-    project_id,
-    check_url = TRUE,
-    check_username = FALSE,
-    check_token_pattern = TRUE,
-    username = NA_character_
-  )$token
-
-  url <- "https://redcap.ucdenver.edu/api/"
-
-  formData <- list("token" = .token,
-                   content = 'report',
-                   format = 'csv',
-                   report_id = report_id,
-                   csvDelimiter = '',
-                   rawOrLabel = val_type,
-                   rawOrLabelHeaders = header_type,
-                   exportCheckboxLabel = 'true',
-                   returnFormat = 'json'
-                   )
-
-  response <- httr::POST(url, body = formData, encode = "form")
-
-  data <- httr::content(response)
-
-  # Remove the <br> and white space from likert columns only if the responses
-  # are in label format (character)
-  data <- data %>%
-    mutate_if(is.character, ~ str_replace(., "<br>", replacement = '')) %>%
-    mutate_if(is.character, ~ str_trim(.))
-
-  return(data)
-}
+.token <- retrieve_credential_local(
+  path_credential,
+  project_id,
+  check_url = TRUE,
+  check_username = FALSE,
+  check_token_pattern = TRUE,
+  username = NA_character_
+)$token
 ```
 
-```{r, pull data}
-# Pull the 2024 report in label format w/ out the demographic race columns and 
-# clinic name
-data_lab <- pull_report('128507', 'label', 'raw') %>%
-  select(-(contains("demographic_4_race")), -(contains("clinic_name____99")))
+```{r}
+data_lab <- pull_redcap_report(
+  .token,
+  '164938',
+  'label',
+  'raw'
+)
+```
 
-# Pull the 2024 report in raw format for the demographic race
-data_raw <- pull_report('128507', 'raw', 'raw') %>%
-  select(contains("demographic_4_race"))
+```{r}
+data_raw <- pull_redcap_report(
+  .token,
+  '164938',
+   'raw', 
+   'raw')
+```
 
-# Merge the race cols into the main data frame
-data <- bind_cols(data_lab, data_raw)
-
-# Drop record id 171 because it was a test record shown in clinic_name____99
-data %<>%
-  filter(record_id != 171)
-
-# Remove the race data frame
-rm(data_raw, data_lab)
-
-
+```{r}
 # Pull the column headers in label format for displaying in tables/charts
 col_labs <- names(
-  (pull_report('128507', 'raw', 'label') %>% select(-"Clinic Name (choice=TEST RECORD)")))
+  (pull_redcap_report(
+    .token,
+    '164938', 
+    'raw', 
+    'label')
+  )
+)
 ```
 
 ```{r}
 # Modify the column names by removing the _2024 and _v1 suffixes
 new_col_names <-
-  colnames(data) %>%
-  str_replace(., '_2024', replacement = '') %>%
-  str_replace(., '_v1', replacement = '')
+  colnames(data_lab)
 
 # Set the new column names to harmonize column names in R
-colnames(data) <- new_col_names
+colnames(data_lab) <- new_col_names
 
 # Create a data frame with the column names and their corresponding column
 # labels
@@ -132,60 +106,39 @@ labels <- data.frame(t(col_labs))
 colnames(labels) <- new_col_names
 ```
 
-
 ```{r}
-# Load 2023 data report ID = 128509
-# Need to compare Q3 and Q4
-
-# Pull the 2023 report in label format w/ out the demographic race columns and 
-# clinic name
-data_lab <- pull_report('128509', 'label', 'raw') %>%
-  select(-(contains("demographic_4_race")), -(contains("clinic_name")))
-
-# Pull the 2024 report in raw format for the demographic race anc clinic_name
-# columns only
-data_raw <- pull_report('128509', 'raw', 'raw') %>%
-  select(contains("demographic_4_race"), -(contains("clinic_name")))
-
 # Merge the race cols into the main data frame
-data_2023 <- bind_cols(data_lab, data_raw)
+data <- bind_cols(
+  data_lab %>% select(-(contains("demographic_4_race"))),
+  data_raw %>% select(contains("demographic_4_race"))
+  )
+```
 
-# Drop record id 171 because it was a test record
+<!-- //////////////////////////// DATA CLEANING ////////////////////////////-->
+```{r}
+# Create a Year variable
 data %<>%
-  filter(record_id != 171)
+  mutate(Year = redcap_event_name) %>%
+  mutate(Year = ifelse(Year == "Participant Information", NA, Year))
 
-# Remove the race data frame
-rm(data_raw, data_lab)
+# Remove the <br> and any trailing/leading spaces
+data %<>%
+  mutate(across(where(is.character), ~ gsub("<br>", "", ., fixed = TRUE))) %>%
+  mutate(across(where(is.character), ~ str_trim(., side = "both")))
 
+# In 2025, there were new versions of transgender, disability, dash_aware, and
+# hi_partners_q1. This code chunk will coalesce the older and newer columns 
+# since the change was in the phrasing of the question, not necessarily the
+# responses. This was done to facilitate comparisons between years
+data %<>%
+  mutate(
+    dash_aware = coalesce(dash_aware_v2, dash_aware),
+    demographic_6_gender = coalesce(demographic_6_gender_2, demographic_6_gender),
+    demographic_8_transgender = coalesce(demographic_8_transgender_v2, demographic_8_transgender),
+    demographic_9_disability = coalesce(demographic_9_disability_v2, demographic_9_disability),
+    hi_partners_q1 = coalesce(hi_partners_q1_v2, hi_partners_q1)  
+  )
 
-# Pull the column headers in label format for displaying in tables/charts
-col_labs <- names(
-  (pull_report('128509', 'raw', 'label') %>% select(-(contains("Clinic Name")))))
-
-# Modify the column names by removing the _2024 and _v1 suffixes
-new_col_names <-
-  colnames(data_2023) %>%
-  str_replace(., '_2023', replacement = '') #%>%
-  # str_replace(., '_v1', replacement = '')
-
-# Set the new column names to harmonize column names in R
-colnames(data_2023) <- new_col_names
-
-# Create a data frame with the column names and their corresponding column
-# labels
-labels_2023 <- data.frame(t(col_labs))
-colnames(labels_2023) <- new_col_names
-```
-
-```{r}
-data <- bind_rows(
-  (data %>%
-    mutate(Year = 2024)),
-  (data_2023 %>%
-    mutate(Year = 2023)))
-```
-
-```{r}
 # Set columns to factor and order the levels
 # Q1:
 data %<>%
@@ -195,22 +148,26 @@ data %<>%
                                        "Moderate problem",
                                        "Serious problem"))))
 
-# Q2
-data %<>%
-  mutate(across(hi_clinic_q1:hi_clinic_implicit,
-                ~ factor(., levels = c("Not at all",
-                                       "Slightly",
-                                       "Moderately",
-                                       "Very much",
-                                       "Extremely"))))
+# In 2025, hi_clinic_* questions were not asked, so the numbering changes from
+# here on out.
 
-# Collapse very much and extremely
-data %<>%
-  mutate(across(hi_clinic_q1:hi_clinic_implicit,
-                ~ fct_collapse(., `Very much/Extremely` = c("Very much", "Extremely"))))
+# Q2
+# data %<>%
+#   mutate(across(starts_with("hi_clinic_"),
+#                 ~ factor(., levels = c("Not at all",
+#                                        "Slightly",
+#                                        "Moderately",
+#                                        "Very much",
+#                                        "Extremely"))))
+
+# # Collapse very much and extremely
+# data %<>%
+#   mutate(across(starts_with("hi_clinic_"),
+#                 ~ fct_collapse(., `Very much/Extremely` = c("Very much", "Extremely"))))
 
   
-# Q3.1, Q4
+# Q2.1, Q3
+# The responses for these questions are all on a continuum of importance
 data %<>%
   mutate(across(c(hi_individual_q1, hi_clinicleaders_q1),
                 ~ factor(., levels = c("Not important at all",
@@ -218,16 +175,16 @@ data %<>%
                                        "Moderately important",
                                        "Extremely important"))))
 
-
-# Q5,Q14
+# Q4, Q13
+# The responses for these question are all on a continuum of agreeableness
 data %<>%
-  mutate(across(c(meaningful_change, org_awareness, org_collab),
+  mutate(across(c(meaningful_change, org_awareness, org_collab, pac),
                 ~ factor(., levels = c("Strongly disagree",
                                        "Disagree",
                                        "Agree",
                                        "Strongly agree"))))
 
-# Q6
+# Q5
 data %<>%
   mutate(across(clinic_hefocus,
                 ~ factor(., levels = c("Far too little",
@@ -236,7 +193,7 @@ data %<>%
                                        "Too much",
                                        "Far too much"))))
 
-# Q8
+# Q7
 data %<>%
   mutate(across(dash_aware,
                 ~ factor(.,
@@ -245,14 +202,14 @@ data %<>%
                                     "I knew they existed and have seen the data.",
                                     "I knew they existed, have seen the data, and have used at least some of the data to shape local operations or clinical work."))))
 
-# Q10
+# Q9
 data %<>%
   mutate(across(sw_skills:sw_clinicianavail,
                 ~ factor(., levels = c('Strength',
                                        'Unsure',
                                        'Challenge'))))
 
-# Q12
+# Q11
 data %<>%
   mutate(across(confidence_disability,
                 ~ factor(., levels = c('Not at all confident',
@@ -260,7 +217,7 @@ data %<>%
                                        'Somewhat confident',
                                        'Very confident'))))
 
-# Q13
+# Q12
 data %<>%
   mutate(across(disability_time:disability_other,
                 ~ factor(., levels = c('Not at all a barrier',
@@ -270,26 +227,13 @@ data %<>%
 ```
 
 ```{r}
-# After processing data for q3 and q4, put back into a separate data frame so that the tables don't have to be modified
-data_2023 <- data %>% 
-  filter(Year == 2023)
+data <- data %>% filter(Year == 2025)
+```
 
-data_2023 <- data_2023 %>%
-  rename(Practice = demographic_1_practice,
-          Role = demographic_2_role,
-          Age = demographic_3_age,
-          Gender = demographic_6_gender,
-          Transgender = demographic_8_transgender,
-          Disability = demographic_9_disability,
-          Residency = demographic_residency)
-
-# Modify Role values to shorten the display of "Clinician/Provider"
-data_2023 %<>%
-  mutate(Role = ifelse(Role == "Clinician/Provider (medical, behavioral health, pharmacy)", 
-                       "Clinician/Provider", Role))
-
-data <- data %>% 
-  filter(Year == 2024)
+```{r, eval = FALSE}
+# Code chunk to set up the params list
+params = list()
+params$clinic  <- "All"
 ```
 
 <!-- If clinic is set to all, then display the response rate. Cannot display a 
@@ -306,7 +250,7 @@ clinic value to filter. -->
 # }
 ```
 
-<!-- ```{r, eval=show_response_rate} -->
+<!-- ```{r,eval=show_response_rate} -->
 <!-- # data %>% -->
 <!-- #   select(health_equity_in_dfm_practices_survey_complete) %>% -->
 <!-- #   tbl_summary(label = list(health_equity_in_dfm_practices_survey_complete = "Survey Complete")) %>% -->
@@ -315,34 +259,72 @@ clinic value to filter. -->
 
 # Response Rate
 ```{r}
-# Lone Tree   --> clinic_name___1
-# WISH        --> clinic_name___2
-# Boulder     --> clinic_name___3
-# AFW         --> clinic_name___4
-# Westminster --> clinic_name___5
-if (params$clinic == "Lone Tree") {
+# Count the number of survey invitations to serve as the denominator
+invited <- data_lab %>% 
+  filter(!is.na(clinic_name), is.na(surveystop_dtd)) %>% 
+  group_by(clinic_name) %>% 
+  count() %>%
+  ungroup() %>%
+  rename(invited = n)
+
+all_invited <- invited %>%
+  mutate(clinic_name = "All") %>%
+  group_by(clinic_name) %>%
+  summarise(invited = sum(invited), .groups = "drop") 
+
+invited <- bind_rows(invited, all_invited)
+```
+
+```{r}
+completed <- data %>%
+  filter(health_equity_in_dfm_practices_survey_complete == "Complete") %>%
+  group_by(demographic_1_practice) %>%
+  count() %>%
+  ungroup() %>%
+  # drop_na() %>%
+  rename(completed = n)
+
+all_completed <- completed %>%
+  mutate(demographic_1_practice = "All") %>%
+  group_by(demographic_1_practice) %>%
+  summarise(completed = sum(completed), .groups = "drop")
+
+completed <- bind_rows(completed, all_completed)
+
+```
+
+```{r}
+invited %>% 
+  left_join(completed, by = c("clinic_name" = "demographic_1_practice")) %>%
+  mutate(response_rate = str_c(round((completed / invited) * 100, 2), "%")) %>%
+  filter(clinic_name %in% params$clinic) %>%
+  gt::gt()
+```
+
+```{r}
+if (params$clinic != "All") {
   data %<>%
-    filter(clinic_name___1 == "Lone Tree")
-} else if (params$clinic == "WISH") {
-  data %<>%
-    filter(clinic_name___2 == "WISH")
-} else if (params$clinic == "Boulder") {
-  data %<>%
-    filter(clinic_name___3 == "Boulder")
-} else if (params$clinic == "AF Williams") {
-  data %<>%
-    filter(clinic_name___4 == "AFW")
-} else if (params$clinic == "Westminster") {
-  data %<>%
-    filter(clinic_name___5 == "Westminster")
+    filter(demographic_1_practice %in% params$clinic)
 }
 ```
 
 ```{r}
-data %>%
-  select(health_equity_in_dfm_practices_survey_complete) %>%
-  tbl_summary(label = list(health_equity_in_dfm_practices_survey_complete = "Survey Complete")) %>%
-  as_gt()
+# Response rate
+# data %>%
+#   select(health_equity_in_dfm_practices_survey_complete) %>%
+#   tbl_summary(label = list(health_equity_in_dfm_practices_survey_complete = "Survey Complete")) %>%
+#   as_gt()
+```
+
+
+```{r}
+# Output to .csv file
+# data %>%
+#   select(health_equity_in_dfm_practices_survey_complete) %>%
+#   tbl_summary(label = list(health_equity_in_dfm_practices_survey_complete = "Survey Complete"),
+#               statistic = list(everything() ~ "{p}")) %>%
+#   as_tibble() %>%
+#   write_csv(., str_c(here("deliverables/csv"), "/", params$clinic, "_resp_rate.csv"))
 ```
 
 
@@ -353,11 +335,11 @@ data %<>%
 ```
 
 ```{r}
-# # filter data to clinic level
-# if (params$clinic != 'All') {
-#   data %<>%
-#     filter(demographic_1_practice == params$clinic)
-# }
+# filter data to clinic level
+if (params$clinic != 'All') {
+  data %<>%
+    filter(demographic_1_practice == params$clinic)
+}
 ```
 
 # Participant Characteristics
@@ -378,6 +360,7 @@ data <- data %>%
                            levels = c("Woman", "Man",
                                       "Nonbinary/Gender Non-Conforming",
                                       "Other (please specify)",
+                                      "Another Gender (please specify)",
                                       "Prefer not to answer")),
          Transgender = factor(Transgender,
                                 levels = c("Yes", "No",
@@ -423,7 +406,7 @@ race_vars <- names(data %>%
 
 # Set the race variables to factor to display in demographic table
 data <- data %>%
-  mutate(across(race_vars, ~ factor(., levels = c("0", "1"))))
+  mutate(across(all_of(race_vars), ~ factor(., levels = c("0", "1"))))
 
 # Convert NAs to explicit values for tabulation
 data %<>%
@@ -486,7 +469,7 @@ data %>%
 
 
 ```{r}
-freq_prop_tab <- function(df) {
+freq_prop_tab <- function(df, q) {
   #' freq_prop_tab
   #'
   #' Returns a gt_summary() table of columns with categorical responses. This
@@ -495,6 +478,7 @@ freq_prop_tab <- function(df) {
   #' column headers as labels instead of the redcap fields
   #'
   #' @param df a dataframe that has only the columns of interest to tabulate
+  #' @param q a character string to label csv output
   
   role <- df %>% select(Role)
   
@@ -502,25 +486,11 @@ freq_prop_tab <- function(df) {
   
   vars <- names(df)
 
+
+
   var_labs <- labels %>% select(all_of(vars)) %>% as.character()
 
-  # Draft code of trying to set unknown to columns that have missing only
-  # set_unknown <- function(var) {
-  #   
-  #   n_missing <- df %>%
-  #     select(var) %>%
-  #     filter(var) %>%
-  #     nrow()
-  #   
-  #   if (n_missing > 0) {
-  #     df %<>% 
-  #       mutate(var = fct_na_value_to_level(var, level = "Unknown"))
-  #     
-  #   }
-  # }
-  # 
-  # df %>%
-  #   mutate(across(everything(), ~ set_unknown(!!sym(.))))
+
   df <- df %>%
     mutate(across(everything(), ~ fct_na_value_to_level(., level = "Unknown"))) %>%
     rename_at(all_of(vars), ~ var_labs)
@@ -532,6 +502,16 @@ freq_prop_tab <- function(df) {
     add_overall() %>%
     as_gt()
 
+  # Output the percentages only to .csv
+  bind_cols(role, df) %>%
+    tbl_summary(by = Role,
+                statistic = everything() ~ "{p}") %>%
+    bold_labels() %>%
+    modify_header(label = "") %>% 
+    add_overall() %>%
+    as_tibble() %>%
+    write_csv(., str_c(here("2025/deliverables/csv"), "/", params$clinic, "_", q, ".csv"))
+
   return(tab)
 }
 ```
@@ -540,14 +520,14 @@ freq_prop_tab <- function(df) {
 ```{r}
 data %>%
   select(Role, hi_problems_q1:hi_problems_q3) %>%
-  freq_prop_tab(.)
+  freq_prop_tab(., "q1")
 ```
 
 ```{r}
 q1_plot <- function(var, label) {
   #' generate q1_plot
   #'
-  #' Creates a flipped, clustered bar chart for the hi_problems_q1 through 
+  #' Creates a horizontal, clustered bar chart for the hi_problems_q1 through 
   #' hi_problems_q3 sub questions in Q1. References the "data" data frame from
   #' the global environment
   #'
@@ -589,7 +569,7 @@ q1_plot <- function(var, label) {
   left_join(role, n_group, by = "Role") %>%
     mutate(Proportion = Frequency/n_group) %>%
     select(-n_group) %>%
-    bind_rows(., overall) %>%
+    # bind_rows(., overall) %>% # This turns off/on whether to include Overall
     filter(sym(var) != "Unknown",
            Role != "Unknown Role") %>%
     drop_na(sym(var)) %>%
@@ -599,9 +579,10 @@ q1_plot <- function(var, label) {
     ggplot(aes(x = !!sym(var), y = Proportion, fill = Role)) +
     geom_col(alpha = 0.8, 
              position = position_dodge2(width = 0.9, preserve = "single")) +
-    theme_minimal()+
+    theme_minimal() +
     scale_fill_brewer(type = "qual", palette = 2) +
     scale_y_continuous(labels = scales::percent, limits = c(0,1)) +
+    scale_x_discrete(limits = c("Not a problem at all", "Minor problem", "Moderate problem", "Serious problem")) +
     labs(y = "Percentage", x = "", title = label) +
     coord_flip() +
     theme(legend.position = "top") +
@@ -609,54 +590,32 @@ q1_plot <- function(var, label) {
 }
 ```
 
-```{r, fig.width=6.5, dpi = 600}
-q1_plot('hi_problems_q1', label = 'In the United States')
+```{r,fig.width=6.5, dpi = 600}
+q1_plot(var = 'hi_problems_q1', label = 'In the United States')
 ```
 
-```{r, fig.width=6.5, dpi = 600}
+```{r,fig.width=6.5, dpi = 600}
 q1_plot('hi_problems_q2', label = 'In the UC Health System?')
 ```
 
-```{r, fig.width=6.5, dpi = 600}
+```{r,fig.width=6.5, dpi = 600}
 q1_plot('hi_problems_q3', label = 'In your clinic?')
 ```
 
-
-# Q2: Among patients at your clinic, how much do you think each of the following contributes to health inequities?
+<!-- # Q2: Among patients at your clinic, how much do you think each of the following contributes to health inequities? -->
 ```{r}
+#| eval: false
 data %>%
   select(Role,hi_clinic_q1:hi_clinic_q4, hi_clinic_implicit) %>%
-  freq_prop_tab(.)
+  freq_prop_tab(., "q2")
 ```
 
 
-# Q3: How important is it to you to address health inequities within your clinic?
+# Q2: How important is it to you to address health inequities within your clinic?
 ```{r}
 data %>%
   select(Role, hi_individual_q1) %>%
-  freq_prop_tab()
-```
-
-## 2024 vs 2023
-```{r}
-bind_rows(
-  (data_2023 %>% 
-    filter(health_equity_in_dfm_practices_survey_complete == "Complete") %>%
-    select(Role, hi_individual_q1, Year)),
-  (data %>%
-    select(Role, hi_individual_q1, Year))) %>%
-filter(Role != "Unknown Role") %>%
-mutate(hi_individual_q1 = fct_na_value_to_level(hi_individual_q1, level = "Unknown")) %>%
-rename("How important is it to you to address health inequities within your clinic?" = hi_individual_q1) %>%  
-tbl_strata(
-  strata = Role,
-  .tbl_fun = 
-    ~ .x %>%
-      tbl_summary(by = Year) %>%
-      bold_labels() %>%
-      modify_header(label = "")
-) %>% 
-      as_gt()
+  freq_prop_tab(., "q2")
 ```
 
 ```{r}
@@ -677,12 +636,12 @@ if(n_responses != 0) {
 }
 ```
 
-```{r, eval=show_table}
+```{r,eval=show_table}
 data %>%
   filter(hi_individual_q1 %in% c("Not important at all", 
                                  "Slightly important")) %>%
   select(Role, hi_individual_q2) %>%
-  freq_prop_tab()
+  freq_prop_tab(., "q2_2" )
 ```
 
 <!-- If there are responses, then display them . -->
@@ -702,7 +661,7 @@ if(n_responses != 0) {
 }
 ```
 
-```{r, eval=show_table}
+```{r,eval=show_table}
 # Only one responded to this question, most clinics will not have data for this
 # question
 data %>%
@@ -711,37 +670,19 @@ data %>%
   gt::gt()
 ```
 
-# Q4: How important is it to your clinic leadership to address health inequities at your clinic?
+# Q3: How important is it to your clinic leadership to address health inequities at your clinic?
 ```{r}
 data %>%
   select(Role, hi_clinicleaders_q1) %>%
-  freq_prop_tab()
+  freq_prop_tab(., "q3")
 ```
 
-```{r}
-bind_rows(
-  (data_2023 %>% 
-    filter(health_equity_in_dfm_practices_survey_complete == "Complete") %>%
-    select(Role, hi_clinicleaders_q1, Year)),
-  (data %>%
-    select(Role, hi_clinicleaders_q1, Year))) %>%
-mutate(hi_clinicleaders_q1 = fct_na_value_to_level(hi_clinicleaders_q1, level = "Unknown")) %>%
-rename("How important is it to your clinic leadership to address health inequities at your clinic?" = hi_clinicleaders_q1) %>%  
-tbl_strata(
-  strata = Role,
-  .tbl_fun = 
-    ~ .x %>%
-      tbl_summary(by = Year) %>%
-      bold_labels() %>%
-      modify_header(label = "")) %>% 
-as_gt()
-```
 
-# Q5: Please rate how much you agree or disagree with the following statement:
+# Q4: Please rate how much you agree or disagree with the following statement:
 ```{r}
 data %>%
   select(Role, meaningful_change) %>%
-  freq_prop_tab()
+  freq_prop_tab(., "q4")
 ```
 
 ## Please describe the changes your clinic has made in a few phrases or sentences: Only for those that responded to at least "Agree" above.
@@ -753,19 +694,52 @@ data %>%
 ```
 
 
-# Q6: Do you think your clinic focuses on health equity too little, the right amount, or too much?
+# Q5: Do you think your clinic focuses on health equity too little, the right amount, or too much?
 ```{r}
 data %>%
   select(Role, clinic_hefocus) %>%
-  freq_prop_tab()
+  freq_prop_tab(., "q5")
 ```
 
+```{r, fig.width=6.5}
+# Create a plot, limit to staff and provider
+staff <-
+    data %>% 
+    filter(Role == "Staff") %>%
+    select(Role, clinic_hefocus) %>% 
+    group_by(Role, clinic_hefocus) %>%
+    summarise(Frequency = n(), .groups = "drop") %>%
+    mutate(Proportion = Frequency/nrow(data %>% filter(Role == "Staff")))
 
-# Q7: Have you taken any of the following actions in the last year? (Select all that apply)
+provider <- 
+    data %>% 
+    filter(Role == "Clinician/Provider") %>%
+    select(Role, clinic_hefocus) %>% 
+    group_by(Role, clinic_hefocus) %>%
+    summarise(Frequency = n(), .groups = "drop") %>%
+    mutate(Proportion = Frequency/nrow(data %>% filter(Role == "Clinician/Provider")))
+
+
+bind_rows(staff, provider) %>%
+  drop_na() %>%
+  ggplot(aes(x = clinic_hefocus, y = Proportion, fill = Role)) +
+  geom_col(alpha = 0.8, 
+            position = position_dodge2(width = 0.9, preserve = "single")) +
+  theme_minimal() +
+  scale_fill_brewer(type = "qual", palette = 2) +
+  scale_y_continuous(labels = scales::percent, limits = c(0,1)) +
+  scale_x_discrete(limits = c("Far too little", "Too little", "The right amount", "Too much", "Far too much")) +
+  labs(y = "Percentage", x = "", title = "Clinic focus on health equity") +
+  coord_flip() +
+  theme(legend.position = "top", plot.title = element_text(hjust = -0.0)) +
+  guides(fill = guide_legend(title = "", reverse = TRUE))
+```
+
+# Q6: Have you taken any of the following actions in the last year? (Select all that apply)
 ```{r}
 df <- data %>%
   select(personal_actions_q1___1:personal_actions_q1____66) %>%
-    mutate(across(everything(), ~ ifelse(!is.na(.), 1, 0)),
+    mutate(across(everything(), ~ ifelse(.x == "Checked", 1, 0)),
            across(everything(), ~ factor(., levels = c("0", "1"))))
 
 vars <- names(df)
@@ -780,7 +754,14 @@ var_labs <- labels %>%
   str_trim()                      # removes any trailing white space
 
 
-bind_cols(df, data.frame(Role = data$Role)) %>%
+q6 <- 
+  bind_cols(df, data.frame(Role = data$Role))
+```
+
+
+```{r}
+# Display table
+q6 %>%
   tbl_summary(by = Role,
               value = list(vars[1] ~ "1",
                            vars[2] ~ "1",
@@ -802,12 +783,39 @@ bind_cols(df, data.frame(Role = data$Role)) %>%
   as_gt()
 ```
 
+
+```{r}
+# Output to csv
+bind_cols(df, data.frame(Role = data$Role)) %>%
+  tbl_summary(by = Role,
+              statistic = everything() ~ "{p}",
+              value = list(vars[1] ~ "1",
+                           vars[2] ~ "1",
+                           vars[3] ~ "1",
+                           vars[4] ~ "1",
+                           vars[5] ~ "1",
+                           vars[6] ~ "1",
+                           vars[7] ~ "1"),
+              label = list(vars[1] ~ var_labs[1],
+                           vars[2] ~ var_labs[2],
+                           vars[3] ~ var_labs[3],
+                           vars[4] ~ var_labs[4],
+                           vars[5] ~ var_labs[5],
+                           vars[6] ~ var_labs[6],
+                           vars[7] ~ var_labs[7])
+              ) %>%
+  modify_header(label = "") %>%
+  add_overall() %>%
+  as_tibble %>%
+  write_csv(., str_c(here("2025/deliverables/csv"), "/", params$clinic, "_", "q6", ".csv"))
+```
+
 ```{r}
 # May need to make some data frames and merge in the number of responses per group to come up with %ages
 overall <- data %>% 
   select(Role, personal_actions_q1___1:personal_actions_q1____66) %>%
   mutate(Role = 'Overall') %>%
-  mutate(across(personal_actions_q1___1:personal_actions_q1____66, ~ ifelse(is.na(.), 0, 1))) %>%
+  mutate(across(personal_actions_q1___1:personal_actions_q1____66, ~ ifelse(.x == "Unchecked", 0, 1))) %>%
   pivot_longer(cols = personal_actions_q1___1:personal_actions_q1____66,
                names_to = "Question",
                values_to = "Endorsed") %>%
@@ -819,7 +827,7 @@ overall <- data %>%
 
 role <- data %>%
   select(Role, personal_actions_q1___1:personal_actions_q1____66) %>%
-  mutate(across(personal_actions_q1___1:personal_actions_q1____66, ~ ifelse(is.na(.), 0, 1))) %>%
+  mutate(across(personal_actions_q1___1:personal_actions_q1____66, ~ ifelse(.x == "Unchecked", 0, 1))) %>%
   pivot_longer(cols = personal_actions_q1___1:personal_actions_q1____66,
                names_to = "Question",
                values_to = "Endorsed") %>%
@@ -831,13 +839,14 @@ role <- data %>%
   select(-n_group)
 ```
 
-```{r, fig.width=6.5}
-bind_rows(overall, role) %>%
+```{r,fig.width=6.5}
+role %>%
+  # bind_rows(overall) %>% # Turns on/off whether or not to include Overall
   filter(Role != "Unknown Role") %>%
   mutate(Role = factor(Role, levels = rev(c("Overall", "Clinician/Provider", "Staff")))) %>%
   mutate(Question = fct_collapse(factor(Question),
                                "Health equity training" = "personal_actions_q1___1",
-                               "Informal opportunities" = "personal_actions_q1___2",
+                               "Informal learning" = "personal_actions_q1___2",
                                "Changed patient care" = "personal_actions_q1___3",
                                "Changed communication" = "personal_actions_q1___4",
                                "Project participation" = "personal_actions_q1___5",
@@ -849,7 +858,7 @@ bind_rows(overall, role) %>%
                                "Project participation",
                                "Changed communication",
                                "Changed patient care",
-                               "Informal opportunities",
+                               "Informal learning",
                                "Health equity training")), y = Proportion, fill = Role)) +
   geom_col(alpha = 0.8, position = position_dodge2(.9, preserve = 'single')) +
   # geom_text(aes(label = round(Proportion * 100)),
@@ -867,7 +876,7 @@ bind_rows(overall, role) %>%
   coord_flip()
 ```
 
-```{r, eval = FALSE}
+```{r,eval = FALSE}
 # Chack how many rows of unknown in pa q1_4
 data %>%
   filter(Role == 'Unknown Role') %>%
@@ -875,84 +884,109 @@ data %>%
 ```
 
 
-# Q8: Your clinic has access to reports that compare healthcare quality data in our patients between different groups (racial/ethnic groups, type of insurance, and whether or not they need an interpreter). This allows our clinics to identify health inequities among their patients.
+# Q7: Your clinic has access to reports that compare healthcare quality data in our patients between different groups (racial/ethnic groups, type of insurance, and whether or not they need an interpreter). This allows our clinics to identify health inequities among their patients.
 ```{r}
 labels <- labels %>%
-  mutate(dash_aware = ifelse(dash_aware == 'Your clinic has access to reports that compare healthcare quality data in our patients between different groups (racial/ethnic groups, type of insurance, and whether or not they need an interpreter). This allows our clinics to identify health inequities among their patients. Please describe your experience with these reports.','Please describe your experience with these reports.', dash_aware))
+  mutate(dash_aware = "Please describe your experience with these reports.")
 
 data %>%
   select(Role, dash_aware) %>%
-  freq_prop_tab()
+  freq_prop_tab(., "q7")
 ```
 
-
-## We would like to understand how these reports have impacted staff and providers in our family medicine clinics. Please select any statements that you agree with. (Select all that apply) Only for those that responded to at least seeing the data.
+<!-- NOT ASKED IN 2025 -->
+<!-- ## We would like to understand how these reports have impacted staff and providers in our family medicine clinics. Please select any statements that you agree with. (Select all that apply) Only for those that responded to at least seeing the data. -->
 ```{r}
-df <- data %>%
-  filter(dash_aware %in% c('I knew they existed and have seen the data.',
-                           'I knew they existed, have seen the data, and have used at least some of the data to shape local operations or clinical work.')) %>%
-  select(dash_uses___1:dash_uses___5) %>% 
-  mutate(across(everything(), ~ ifelse(!is.na(.), 1, 0)))
+# df <- data %>%
+#   filter(dash_aware %in% c('I knew they existed and have seen the data.',
+#                            'I knew they existed, have seen the data, and have used at least some of the data to shape local operations or clinical work.')) %>%
+#   select(dash_uses___1:dash_uses___5) %>% 
+#   mutate(across(everything(), ~ ifelse(.x == "Checked", 1, 0)))
 
-df_names <- names(df)
+# df_names <- names(df)
 
-index <- df %>%
-  colSums() %>%
-  order(decreasing = TRUE)
+# index <- df %>%
+#   colSums() %>%
+#   order(decreasing = TRUE)
 
-ordered_names <- df_names[index]
+# ordered_names <- df_names[index]
 
-df %<>%
-  select(all_of(ordered_names)) %>%
-  mutate(across(everything(), ~ factor(., levels = c("0", "1"))))
-
-
-vars <- names(df)
-
-role <- data %>%
-  filter(dash_aware %in% c('I knew they existed and have seen the data.',
-                           'I knew they existed, have seen the data, and have used at least some of the data to shape local operations or clinical work.')) %>%
-  select(Role)
-
-# modify the column header labels for display
-var_labs <- labels %>%
-  select(all_of(vars)) %>%
-  as.character() %>%
-  str_remove(".*=") %>%           # removes all characters before '='
-  gsub('.{1}$', '', .) %>%        # removes the 1st character from the end ')'
-  str_replace("<br>", '') %>%     # removes the '<br>' if available
-  str_trim()                      # removes any trailing white space
+# df %>%
+#   select(all_of(ordered_names)) %>%
+#   mutate(across(everything(), ~ factor(., levels = c("0", "1"))))
 
 
-bind_cols(df, role) %>%
-  tbl_summary(by = Role,
-              value = list(vars[1] ~ "1",
-                           vars[2] ~ "1",
-                           vars[3] ~ "1",
-                           vars[4] ~ "1",
-                           vars[5] ~ "1"),
-              label = list(vars[1] ~ var_labs[1],
-                           vars[2] ~ var_labs[2],
-                           vars[3] ~ var_labs[3],
-                           vars[4] ~ var_labs[4],
-                           vars[5] ~ var_labs[5])
-              ) %>%
-  modify_header(label = "") %>%
-  add_overall() %>%
-  as_gt()
+# vars <- names(df)
+
+# role <- data %>%
+#   filter(dash_aware %in% c('I knew they existed and have seen the data.',
+#                            'I knew they existed, have seen the data, and have used at least some of the data to shape local operations or clinical work.')) %>%
+#   select(Role)
+
+# # modify the column header labels for display
+# var_labs <- labels %>%
+#   select(all_of(vars)) %>%
+#   as.character() %>%
+#   str_remove(".*=") %>%           # removes all characters before '='
+#   gsub('.{1}$', '', .) %>%        # removes the 1st character from the end ')'
+#   str_replace("<br>", '') %>%     # removes the '<br>' if available
+#   str_trim()                      # removes any trailing white space
 ```
 
 
-# Q9: Every clinic has strengths and challenges when it comes to making changes for health equity.
+```{r}
+# Display table
+# bind_cols(df, role) %>%
+#   tbl_summary(by = Role,
+#               value = list(vars[1] ~ "1",
+#                            vars[2] ~ "1",
+#                            vars[3] ~ "1",
+#                            vars[4] ~ "1",
+#                            vars[5] ~ "1"),
+#               label = list(vars[1] ~ var_labs[1],
+#                            vars[2] ~ var_labs[2],
+#                            vars[3] ~ var_labs[3],
+#                            vars[4] ~ var_labs[4],
+#                            vars[5] ~ var_labs[5])
+#               ) %>%
+#   modify_header(label = "") %>%
+#   add_overall() %>%
+#   as_gt()
+```
+
+```{r}
+# output to .csv file
+# bind_cols(df, role) %>%
+#   tbl_summary(by = Role,
+#               statistic = everything() ~ "{p}",
+#               value = list(vars[1] ~ "1",
+#                            vars[2] ~ "1",
+#                            vars[3] ~ "1",
+#                            vars[4] ~ "1",
+#                            vars[5] ~ "1"),
+#               label = list(vars[1] ~ var_labs[1],
+#                            vars[2] ~ var_labs[2],
+#                            vars[3] ~ var_labs[3],
+#                            vars[4] ~ var_labs[4],
+#                            vars[5] ~ var_labs[5])
+#               ) %>%
+#   modify_header(label = "") %>%
+#   add_overall() %>%
+#   as_tibble() %>%
+#   write_csv(., str_c(here("2025/deliverables/csv"), "/", params$clinic, "_", "q7_2", ".csv"))
+
+```
+
+# Q8: Every clinic has strengths and challenges when it comes to making changes for health equity.
 ```{r}
 data %>%
   select(Role, sw_skills:sw_clinicianavail) %>%
-  freq_prop_tab()
+  freq_prop_tab(., "q8")
 ```
 
-```{r, fig.width=6.5, dpi = 600}
-q9_plot <- function(sw, title) {
-  #' generate q9_plots
+```{r,fig.width=6.5, dpi = 600}
+q8_plot <- function(sw, title) {
+  #' generate q8_plots
   #'
   #' Creates a divergent bar chart for the sw_* select all that apply questions
   #'
@@ -963,240 +997,306 @@ q9_plot <- function(sw, title) {
   
   # A vector of the new column names to display as labels
   new_col_names <- c(
-    "KnowledgeSkills",
-    "ClinicCulture",
-    "UCHCulture",
-    "InequityAwareness",
+    "Knowledge Skills",
+    "Clinic Culture",
+    "UCH Culture",
+    "Inequity Awareness",
     "Desire",
-    "DedicatedTime",
+    "Dedicated Time",
     "Money",
     "Leadership",
-    "Relationships",
-    "StaffAvailability",
-    "ClinicianAvailability")
+    "Community Relationships",
+    "Staff Availability",
+    "Clinician Availability")
   
   # Set the new column names
-  colnames(sw) <- new_col_names
+  # colnames(sw) <- new_col_names
   
   # Get the index to order the divergent bars by proportion of strength 
   # responses
-  index <- sw %>%
-    mutate(across(everything(), ~ ifelse(. == "Strength", 1, 0))) %>%
-    mutate(across(everything(), ~ ifelse(is.na(.), 0, .))) %>%
-    colSums() %>%
-    order(decreasing = TRUE)
+  # index <- sw %>%
+  #   mutate(across(everything(), ~ ifelse(. == "Strength", 1, 0))) %>%
+  #   mutate(across(everything(), ~ ifelse(is.na(.), 0, .))) %>%
+  #   colSums() %>%
+  #   order(decreasing = TRUE)
+
+  # Used to turn on/off question ordering
+  index <- c(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11)
   
   # Get the column order using the names of the input data frame after indexing
-  col_order <- names(sw)[index] 
+  # col_order <- names(sw)[index]
+  col_order <- new_col_names
   
-  # Convert input data to a plain dataframe
+  # Convert input data to a plain dataframe as opposed to a tibble
   sw <- data.frame(sw)
+
+  # Change the column names
+  colnames(sw) <- new_col_names
+
+  # Convert the columns to factor
+  # sw %<>% 
+  #   mutate(across(everything(), ~ factor(.x)))
 
   # Create a likert object
   likert_sw <- likert::likert(sw)
 
   # Plot the likert object using the col_order
   plot(likert_sw, group.order = col_order) +
+  # plot(likert_sw)  +
     labs(title = title) +
     theme_minimal() +
     theme(legend.position = "bottom")
+
 }
 ```
 
-```{r, fig.width=6.5, dpi = 600}
-data %>%
-  select(sw_skills:sw_clinicianavail) %>%
-  q9_plot(., "Overall")
+```{r}
+#| eval: false
+sw <- data %>%
+  select(sw_skills:sw_clinicianavail)
+
+title <- "Overall"
 ```
 
-```{r, fig.width=6.5, dpi = 600}
+```{r,fig.width=6.5, dpi = 600}
+data %>%
+  select(sw_skills:sw_clinicianavail) %>%
+  q8_plot(., "Overall")
+```
+
+
+```{r}
+# Data starts out as a data frame, where the col names do not have spaces
+# data(pisaitems)
+
+# One column is Items 24, but it does not show how it is made
+```
+
+
+```{r,fig.width=6.5, dpi = 600}
 data %>%
   filter(Role == "Clinician/Provider") %>%
   select(sw_skills:sw_clinicianavail) %>%
-  q9_plot(., "Clinician/Provider")
+  q8_plot(., "Clinician/Provider")
 ```
 
-```{r, fig.width=6.5, dpi = 600}
+```{r,fig.width=6.5, dpi = 600}
 data %>%
   filter(Role == "Staff") %>%
   select(sw_skills:sw_clinicianavail) %>%
-  q9_plot(., "Staff")
+  q8_plot(., "Staff")
 ```
 
-
-# Q10: Among patients at your clinic, do you think that any of the following groups experience worse health than that of Colorado residents in general? (Select all that apply)
+<!-- NOT ASKED IN 2025 -->
+<!-- # Q9: Among patients at your clinic, do you think that any of the following groups experience worse health than that of Colorado residents in general? (Select all that apply) -->
 ```{r}
-df <- data %>%
-    select(hi_race_q1___1:hi_race_q1____67) %>%
-    mutate(across(everything(), ~ ifelse(!is.na(.), 1, 0)))
+# df <- data %>%
+#     select(hi_race_q1___1:hi_race_q1____67) %>%
+#     mutate(across(everything(), ~ ifelse(.x == "Checked", 1, 0)))
 
-df_names <- names(df)
+# df_names <- names(df)
 
-index <- df %>%
-  colSums() %>%
-  order(decreasing = TRUE)
+# index <- df %>%
+#   colSums() %>%
+#   order(decreasing = TRUE)
 
-ordered_names <- df_names[index]
+# ordered_names <- df_names[index]
 
-df %<>%
-  select(all_of(ordered_names)) %>%
-  mutate(across(everything(), ~ factor(., levels = c("0", "1"))))
+# df %<>%
+#   select(all_of(ordered_names)) %>%
+#   mutate(across(everything(), ~ factor(., levels = c("0", "1"))))
 
-vars <- names(df)
+# vars <- names(df)
 
-# modify the column header labels for display
-var_labs <- labels %>%
-  select(all_of(vars)) %>%
-  as.character() %>%
-  str_remove(".*=") %>%           # removes all characters before '='
-  gsub('.{1}$', '', .) %>%        # removes the 1st character from the end ')'
-  str_replace("<br>", '') %>%     # removes the '<br>' if available
-  str_trim()                      # removes any trailing white space
+# # modify the column header labels for display
+# var_labs <- labels %>%
+#   select(all_of(vars)) %>%
+#   as.character() %>%
+#   str_remove(".*=") %>%           # removes all characters before '='
+#   gsub('.{1}$', '', .) %>%        # removes the 1st character from the end ')'
+#   str_replace("<br>", '') %>%     # removes the '<br>' if available
+#   str_trim()                      # removes any trailing white space
 
 
-bind_cols(df, data.frame(Role = data$Role)) %>%
-  tbl_summary(by = Role,
-              value = list(vars[1] ~ "1",
-                           vars[2] ~ "1",
-                           vars[3] ~ "1",
-                           vars[4] ~ "1",
-                           vars[5] ~ "1",
-                           vars[6] ~ "1",
-                           vars[7] ~ "1",
-                           vars[8] ~ "1",
-                           vars[9] ~ "1",
-                           vars[10] ~ "1",
-                           vars[11] ~ "1",
-                           vars[12] ~ "1"),
-              label = list(vars[1] ~ var_labs[1],
-                           vars[2] ~ var_labs[2],
-                           vars[3] ~ var_labs[3],
-                           vars[4] ~ var_labs[4],
-                           vars[5] ~ var_labs[5],
-                           vars[6] ~ var_labs[6],
-                           vars[7] ~ var_labs[7],
-                           vars[8] ~ var_labs[8],
-                           vars[9] ~ var_labs[9],
-                           vars[10] ~ var_labs[10],
-                           vars[11] ~ var_labs[11],
-                           vars[12] ~ var_labs[12])
-              ) %>%
-  add_overall() %>%
-  modify_header(label = "") %>%
-  as_gt()
+# bind_cols(df, data.frame(Role = data$Role)) %>%
+#   tbl_summary(by = Role,
+#               value = list(vars[1] ~ "1",
+#                            vars[2] ~ "1",
+#                            vars[3] ~ "1",
+#                            vars[4] ~ "1",
+#                            vars[5] ~ "1",
+#                            vars[6] ~ "1",
+#                            vars[7] ~ "1",
+#                            vars[8] ~ "1",
+#                            vars[9] ~ "1",
+#                            vars[10] ~ "1",
+#                            vars[11] ~ "1",
+#                            vars[12] ~ "1"),
+#               label = list(vars[1] ~ var_labs[1],
+#                            vars[2] ~ var_labs[2],
+#                            vars[3] ~ var_labs[3],
+#                            vars[4] ~ var_labs[4],
+#                            vars[5] ~ var_labs[5],
+#                            vars[6] ~ var_labs[6],
+#                            vars[7] ~ var_labs[7],
+#                            vars[8] ~ var_labs[8],
+#                            vars[9] ~ var_labs[9],
+#                            vars[10] ~ var_labs[10],
+#                            vars[11] ~ var_labs[11],
+#                            vars[12] ~ var_labs[12])
+#               ) %>%
+#   add_overall() %>%
+#   modify_header(label = "") %>%
+#   as_gt()
+```
+
+```{r}
+# bind_cols(df, data.frame(Role = data$Role)) %>%
+#   tbl_summary(by = Role,
+#               value = list(vars[1] ~ "1",
+#                            vars[2] ~ "1",
+#                            vars[3] ~ "1",
+#                            vars[4] ~ "1",
+#                            vars[5] ~ "1",
+#                            vars[6] ~ "1",
+#                            vars[7] ~ "1",
+#                            vars[8] ~ "1",
+#                            vars[9] ~ "1",
+#                            vars[10] ~ "1",
+#                            vars[11] ~ "1",
+#                            vars[12] ~ "1"),
+#               label = list(vars[1] ~ var_labs[1],
+#                            vars[2] ~ var_labs[2],
+#                            vars[3] ~ var_labs[3],
+#                            vars[4] ~ var_labs[4],
+#                            vars[5] ~ var_labs[5],
+#                            vars[6] ~ var_labs[6],
+#                            vars[7] ~ var_labs[7],
+#                            vars[8] ~ var_labs[8],
+#                            vars[9] ~ var_labs[9],
+#                            vars[10] ~ var_labs[10],
+#                            vars[11] ~ var_labs[11],
+#                            vars[12] ~ var_labs[12])
+#               ) %>%
+#   add_overall() %>%
+#   modify_header(label = "") %>%
+#   as_tibble() %>%
+#   write_csv(., str_c(here("2025/deliverables/csv"), "/", params$clinic, "_", "q9", ".csv"))
 ```
 
 
 <!-- If there are responses, then display them . -->
 ```{r}
-n_responses <- data %>%
-  select(hi_race_frsp1) %>%
-  drop_na() %>%
-  nrow()
+# data %<>%
+#   mutate(hi_race_frsp1 = hi_race_fre_rspse)
+
+
+# n_responses <- data %>%
+#   select(hi_race_frsp1) %>%
+#   drop_na() %>%
+#   nrow()
 ```
 
 `r if(n_responses != 0){'## Other race/ethnicity (please specify)'}`
 ```{r}
-if(n_responses != 0) {
-  show_table <- TRUE
-} else {
-  show_table <- FALSE
-}
+# if(n_responses != 0) {
+#   show_table <- TRUE
+# } else {
+#   show_table <- FALSE
+# }
 ```
 
-```{r, eval=show_table}
-data %>%
-  select(hi_race_frsp1) %>%
-  drop_na() %>%
-  gt::gt()
+```{r,eval=show_table}
+# data %>%
+#   select(hi_race_frsp1) %>%
+#   drop_na() %>%
+#   gt::gt()
 ```
 
 <!-- If there are responses, then display them . -->
 ```{r}
 # Clean the cliff hanger response in frsp2
-data <- data %>%
-  mutate(hi_race_frsp2 = ifelse(
-    hi_race_frsp2 == 'Personal/political beliefs about health are', 
-    NA, 
-    hi_race_frsp2))
+# data <- data %>%
+#   mutate(hi_race_frsp2 = ifelse(
+#     hi_race_frsp2 == 'Personal/political beliefs about health are', 
+#     NA, 
+#     hi_race_frsp2))
 
-n_responses <- data %>%
-  select(hi_race_frsp2) %>%
-  drop_na() %>%
-  nrow()
+# n_responses <- data %>%
+#   select(hi_race_frsp2) %>%
+#   drop_na() %>%
+#   nrow()
 ```
 
 `r if(n_responses != 0){'## Other'}`
 ```{r}
-if(n_responses != 0) {
-  show_table <- TRUE
-} else {
-  show_table <- FALSE
-}
+# if(n_responses != 0) {
+#   show_table <- TRUE
+# } else {
+#   show_table <- FALSE
+# }
 ```
 
-```{r, eval=show_table}
-data %>%
-    select(hi_race_frsp2) %>%
-    drop_na() %>%
-    gt::gt()
+```{r,eval=show_table}
+# data %>%
+#     select(hi_race_frsp2) %>%
+#     drop_na() %>%
+#     gt::gt()
 ```
 
 
-# Q11: Overall, how confident are you in your ability to provide the same quality of care to patients with disability as you provide to patients without disability.
+# Q9: Overall, how confident are you in your ability to provide the same quality of care to patients with disability as you provide to patients without disability.
 ```{r}
 data %>%
   select(Role, confidence_disability) %>%
-  freq_prop_tab()
+  freq_prop_tab(., "q9")
 ```
 
 
-# Q12: Please tell us how much each of the following is a barrier for you in caring for patients with disability...?
+# Q10: Please tell us how much each of the following is a barrier for you in caring for patients with disability...?
 ```{r}
 data %>%
   select(Role, disability_time:disability_other) %>%
-  freq_prop_tab()
+  freq_prop_tab(., "q10")
 ```
 
 <!-- If there are responses, then display them . -->
 ```{r}
-n_responses <- data %>%
-  select(barriers_frsp) %>%
-  drop_na() %>%
-  nrow()
+# n_responses <- data %>%
+#   select(barriers_frsp) %>%
+#   drop_na() %>%
+#   nrow()
 ```
 
 `r if(n_responses != 0){'## Please specify if "Something else" is selected.'}`
 ```{r}
-if(n_responses != 0) {
-  show_table <- TRUE
-} else {
-  show_table <- FALSE
-}
+# if(n_responses != 0) {
+#   show_table <- TRUE
+# } else {
+#   show_table <- FALSE
+# }
 ```
 
-```{r, eval=show_table}
-data %>%
-  select(barriers_frsp) %>%
-  drop_na() %>%
-  gt::gt()
+```{r,eval=show_table}
+# data %>%
+#   select(barriers_frsp) %>%
+#   drop_na() %>%
+#   gt::gt()
 ```
 
 
-# Q13: Please rate how much you agree or disagree with the following statements:
+# Q11: Please rate how much you agree or disagree with the following statements:
 ```{r}
 data %>%
-  select(Role, org_awareness:org_collab) %>%
-  freq_prop_tab()
+  select(Role, org_awareness:org_collab, pac) %>%
+  freq_prop_tab(., "q11")
 ```
 
 
-# Q14: Are there people or organizations in the community, at UCH, or at the University of Colorado that could be partners to try to address health inequities among patients at your clinic?
+# Q12: Are there people or organizations in the community, at UCH, or at the University of Colorado that could be partners to try to address health inequities among patients at your clinic?
 ```{r}
 data %>%
   select(hi_partners_q1) %>%
   drop_na() %>%
   gt::gt()
 ```
-
-
