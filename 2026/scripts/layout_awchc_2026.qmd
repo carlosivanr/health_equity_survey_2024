@@ -1,11 +1,11 @@
 ---
 # Clinic parameter options are: 
 # All, AF Williams, Boulder, Lone Tree, Westminster, WISH
-# Options do not need to be in quotes
+# Aurora Wellness Community Health Center. Options do not need to be in quotes
 params:
-  clinic: "All"
+  clinic: "Aurora Wellness Community Health Center (AWCHC)"
     
-title: "DFM Health Equities Survey 2025"
+title: "DFM Health Equities Survey 2026"
 subtitle: "`r params$clinic`"
 date: "`r format(Sys.time(), '%B %d %Y')`"
 
@@ -28,8 +28,9 @@ execute:
 ```{r}
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 # Carlos Rodriguez, PhD. CU Anschutz Dept. of Family Medicine
-# DFM Health Equities Surveys 2025
-
+# DFM Health Equities Surveys 2026
+# New Clinic Added (Aurora Wellness Community Health Center (AWCHC))
+# New demographic_race__7 icorporated in code
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 ```
 
@@ -148,17 +149,17 @@ data %<>%
                                        "Moderate problem",
                                        "Serious problem"))))
 
-# In 2025, hi_clinic_* questions were not asked, so the numbering changes from
-# here on out.
-
-# Q2
-# data %<>%
-#   mutate(across(starts_with("hi_clinic_"),
-#                 ~ factor(., levels = c("Not at all",
-#                                        "Slightly",
-#                                        "Moderately",
-#                                        "Very much",
-#                                        "Extremely"))))
+# Q2:
+# In 2025, hi_clinic_* questions were not asked.
+# In 2026, hi_clinic_* questions were asked only if clinic was Aurora Wellness
+# hi_clinic_q1:hi_clinic_q4, hi_clinic_implicit
+data %<>%
+  mutate(across(c(hi_clinic_q1:hi_clinic_q4, hi_clinic_implicit),
+                ~ factor(., levels = c("Not at all",
+                                       "Slightly",
+                                       "Moderately",
+                                       "Very much",
+                                       "Extremely"))))
 
 # # Collapse very much and extremely
 # data %<>%
@@ -224,38 +225,21 @@ data %<>%
                                        'Small barrier',
                                        'Moderate barrier',
                                        'Large barrier'))))
+
+# Q13                                   
 ```
 
 ```{r}
-data <- data %>% filter(Year == 2025)
+data <- data %>% filter(Year == 2026)
+
+# Aurora Wellness Community Health Center (AWCHC)
 ```
 
 ```{r, eval = FALSE}
-# Code chunk to set up the params list
-params = list()
-params$clinic  <- "WISH"
+params <- list()
+params$clinic <- "Aurora Wellness Community Health Center (AWCHC)"
 ```
 
-<!-- If clinic is set to all, then display the response rate. Cannot display a 
-response rate per clinic, since those that did not respond would not have a 
-clinic value to filter. -->
-
-<!-- `r if(params$clinic == "All"){'# Response Rate'}` -->
-
-```{r}
-# if (params$clinic == "All") {
-#   show_response_rate <-  TRUE
-# } else {
-#   show_response_rate <- FALSE
-# }
-```
-
-<!-- ```{r,eval=show_response_rate} -->
-<!-- # data %>% -->
-<!-- #   select(health_equity_in_dfm_practices_survey_complete) %>% -->
-<!-- #   tbl_summary(label = list(health_equity_in_dfm_practices_survey_complete = "Survey Complete")) %>% -->
-<!-- #   as_gt() -->
-<!-- ``` -->
 
 # Response Rate
 ```{r}
@@ -290,7 +274,6 @@ all_completed <- completed %>%
   summarise(completed = sum(completed), .groups = "drop")
 
 completed <- bind_rows(completed, all_completed)
-
 ```
 
 ```{r}
@@ -301,20 +284,6 @@ invited %>%
   gt::gt()
 ```
 
-```{r}
-if (params$clinic != "All") {
-  data %<>%
-    filter(demographic_1_practice %in% params$clinic)
-}
-```
-
-```{r}
-# Response rate
-# data %>%
-#   select(health_equity_in_dfm_practices_survey_complete) %>%
-#   tbl_summary(label = list(health_equity_in_dfm_practices_survey_complete = "Survey Complete")) %>%
-#   as_gt()
-```
 
 
 ```{r}
@@ -431,6 +400,7 @@ data %>%
                 demographic_4_race___4 = "White",
                 demographic_4_race___5 = "Hispanic or Latino",
                 demographic_4_race___6 = "Another race",
+                demographic_4_race___7 = "Middle Eastern or North African",
                 demographic_4_race___8 = "Prefer not to answer"),
               value = list(demographic_4_race___1 ~ "1",
                            demographic_4_race___2 ~ "1",
@@ -438,6 +408,7 @@ data %>%
                            demographic_4_race___4 ~ "1",
                            demographic_4_race___5 ~ "1",
                            demographic_4_race___6 ~ "1",
+                           demographic_4_race___7 ~ "1",
                            demographic_4_race___8 ~ "1")) %>%
   add_overall() %>%
   modify_header(label = "Participant Characteristics") %>%
@@ -461,6 +432,9 @@ data %>%
   modify_table_styling(columns = label,
                      rows = variable == "demographic_4_race___6",
                      undo_text_format = "bold") %>%
+  modify_table_styling(columns = label,
+                     rows = variable == "demographic_4_race___7",
+                     undo_text_format = "bold") %>%                    
   modify_table_styling(columns = label,
                      rows = variable == "demographic_4_race___8",
                      undo_text_format = "bold") %>%
@@ -510,7 +484,7 @@ freq_prop_tab <- function(df, q) {
     modify_header(label = "") %>% 
     add_overall() %>%
     as_tibble() %>%
-    write_csv(., str_c(here("2025/deliverables/csv"), "/", params$clinic, "_", q, ".csv"))
+    write_csv(., str_c(here("2026/deliverables/csv"), "/", params$clinic, "_", q, ".csv"))
 
   return(tab)
 }
@@ -600,14 +574,6 @@ q1_plot('hi_problems_q2', label = 'In the UC Health System?')
 
 ```{r,fig.width=6.5, dpi = 600}
 q1_plot('hi_problems_q3', label = 'In your clinic?')
-```
-
-<!-- # Q2: Among patients at your clinic, how much do you think each of the following contributes to health inequities? -->
-```{r}
-#| eval: false
-data %>%
-  select(Role,hi_clinic_q1:hi_clinic_q4, hi_clinic_implicit) %>%
-  freq_prop_tab(., "q2")
 ```
 
 
@@ -807,7 +773,7 @@ bind_cols(df, data.frame(Role = data$Role)) %>%
   modify_header(label = "") %>%
   add_overall() %>%
   as_tibble %>%
-  write_csv(., str_c(here("2025/deliverables/csv"), "/", params$clinic, "_", "q6", ".csv"))
+  write_csv(., str_c(here("2026/deliverables/csv"), "/", params$clinic, "_", "q6", ".csv"))
 ```
 
 ```{r}
@@ -973,7 +939,7 @@ data %>%
 #   modify_header(label = "") %>%
 #   add_overall() %>%
 #   as_tibble() %>%
-#   write_csv(., str_c(here("2025/deliverables/csv"), "/", params$clinic, "_", "q7_2", ".csv"))
+#   write_csv(., str_c(here("2026/deliverables/csv"), "/", params$clinic, "_", "q7_2", ".csv"))
 
 ```
 
@@ -1087,7 +1053,7 @@ data %>%
   q8_plot(., "Staff")
 ```
 
-<!-- NOT ASKED IN 2025 -->
+<!-- NOT ASKED IN 2025 , IN 2026 Only Aurora Community Wellness -->
 <!-- # Q9: Among patients at your clinic, do you think that any of the following groups experience worse health than that of Colorado residents in general? (Select all that apply) -->
 ```{r}
 # df <- data %>%
@@ -1181,7 +1147,7 @@ data %>%
 #   add_overall() %>%
 #   modify_header(label = "") %>%
 #   as_tibble() %>%
-#   write_csv(., str_c(here("2025/deliverables/csv"), "/", params$clinic, "_", "q9", ".csv"))
+#   write_csv(., str_c(here("2026/deliverables/csv"), "/", params$clinic, "_", "q9", ".csv"))
 ```
 
 
@@ -1299,4 +1265,57 @@ data %>%
   select(hi_partners_q1) %>%
   drop_na() %>%
   gt::gt()
+```
+
+
+# The following questions were presented to Aurora Wellness participants only for the 2026 survey 
+## Among patients at your clinic, how much do you think each of the following contributes to health inequities?
+```{r}
+#| eval: true
+data %>%
+  select(Role,hi_clinic_q1:hi_clinic_q4, hi_clinic_implicit) %>%
+  freq_prop_tab(., "q2")
+```
+
+
+## Is there anything else that you think leads to health inequities among your patients?
+```{r}
+data %>%
+  select(Role, patient_hi_q1) %>%
+  mutate(patient_hi_q1 = fct_na_value_to_level(factor(patient_hi_q1), level = "Unknown")) %>%
+  tbl_summary(
+    by = Role) %>%
+  modify_header(label = "")
+
+```
+
+## Please share what else you think leads to health inequities among your patients
+```{r}
+data %>%
+  select(patient_hi_q2) %>%
+  drop_na() %>%
+  gt::gt()
+```
+
+## Which strategies do you think would be most effective in reducing health inequities among patients at yourclinic? (Select up to 3.)
+```{r}
+data_raw %>%
+  filter(record_id %in% data$record_id, redcap_event_name == "2026_arm_1") %>%
+  select(strategies___1:strategies___9) %>%
+  mutate(across(strategies___1:strategies___9, ~ factor(.x, levels = c("0", "1")))) %>%
+  bind_cols(., data %>%select(Role) )%>%
+  tbl_summary(
+    by = Role, 
+    label = list(
+      strategies___1 = "Practice leaders make a clear commitment to health equity and create a team to lead the work",
+      strategies___2 = "Provide training on topics related to health equity, diversity, and inclusion",
+      strategies___3 = "Focus on health inequities in quality improvement projects",
+      strategies___4 = "Conduct a formal review to look for policies and practices that may unintentionally make health inequities worse",
+      strategies___5 = "Provide data to staff and providers about health inequities among patients at this clinic",
+      strategies___6 = "Ask patients about social barriers to health and refer them to resources (social barriers to health include problems with transportation, housing, food access, etc)",
+      strategies___7 = "Partner with local community organizations to improve the health of your patients",
+      strategies___8 = "Incorporate more input from patients experiencing health inequities into clinic decisions",
+      strategies___9 = "Promote and celebrate diversity of clinic staff, clinicians, and leadership"
+    ),
+    value = everything() ~ "1")
 ```

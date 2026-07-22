@@ -1,11 +1,11 @@
 ---
 # Clinic parameter options are: 
 # All, AF Williams, Boulder, Lone Tree, Westminster, WISH
-# Options do not need to be in quotes
+# Aurora Wellness Community Health Center. Options do not need to be in quotes
 params:
-  clinic: "All"
+  clinic: "Aurora Wellness Community Health Center"
     
-title: "DFM Health Equities Survey 2025"
+title: "DFM Health Equities Survey 2026"
 subtitle: "`r params$clinic`"
 date: "`r format(Sys.time(), '%B %d %Y')`"
 
@@ -28,8 +28,9 @@ execute:
 ```{r}
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 # Carlos Rodriguez, PhD. CU Anschutz Dept. of Family Medicine
-# DFM Health Equities Surveys 2025
-
+# DFM Health Equities Surveys 2026
+# New Clinic Added (Aurora Wellness Community Health Center (AWCHC))
+# New demographic_race__7 icorporated in code
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 ```
 
@@ -148,17 +149,17 @@ data %<>%
                                        "Moderate problem",
                                        "Serious problem"))))
 
-# In 2025, hi_clinic_* questions were not asked, so the numbering changes from
-# here on out.
-
-# Q2
-# data %<>%
-#   mutate(across(starts_with("hi_clinic_"),
-#                 ~ factor(., levels = c("Not at all",
-#                                        "Slightly",
-#                                        "Moderately",
-#                                        "Very much",
-#                                        "Extremely"))))
+# Q2:
+# In 2025, hi_clinic_* questions were not asked.
+# In 2026, hi_clinic_* questions were asked only if clinic was Aurora Wellness
+# hi_clinic_q1:hi_clinic_q4, hi_clinic_implicit
+data %<>%
+  mutate(across(c(hi_clinic_q1:hi_clinic_q4, hi_clinic_implicit),
+                ~ factor(., levels = c("Not at all",
+                                       "Slightly",
+                                       "Moderately",
+                                       "Very much",
+                                       "Extremely"))))
 
 # # Collapse very much and extremely
 # data %<>%
@@ -227,7 +228,7 @@ data %<>%
 ```
 
 ```{r}
-data <- data %>% filter(Year == 2025)
+data <- data %>% filter(Year == 2026)
 ```
 
 ```{r, eval = FALSE}
@@ -431,6 +432,7 @@ data %>%
                 demographic_4_race___4 = "White",
                 demographic_4_race___5 = "Hispanic or Latino",
                 demographic_4_race___6 = "Another race",
+                demographic_4_race___7 = "Middle Eastern or North African",
                 demographic_4_race___8 = "Prefer not to answer"),
               value = list(demographic_4_race___1 ~ "1",
                            demographic_4_race___2 ~ "1",
@@ -438,6 +440,7 @@ data %>%
                            demographic_4_race___4 ~ "1",
                            demographic_4_race___5 ~ "1",
                            demographic_4_race___6 ~ "1",
+                           demographic_4_race___7 ~ "1",
                            demographic_4_race___8 ~ "1")) %>%
   add_overall() %>%
   modify_header(label = "Participant Characteristics") %>%
@@ -461,6 +464,9 @@ data %>%
   modify_table_styling(columns = label,
                      rows = variable == "demographic_4_race___6",
                      undo_text_format = "bold") %>%
+  modify_table_styling(columns = label,
+                     rows = variable == "demographic_4_race___7",
+                     undo_text_format = "bold") %>%                    
   modify_table_styling(columns = label,
                      rows = variable == "demographic_4_race___8",
                      undo_text_format = "bold") %>%
@@ -1087,7 +1093,7 @@ data %>%
   q8_plot(., "Staff")
 ```
 
-<!-- NOT ASKED IN 2025 -->
+<!-- NOT ASKED IN 2025 , IN 2026 Only Aurora Community Wellness -->
 <!-- # Q9: Among patients at your clinic, do you think that any of the following groups experience worse health than that of Colorado residents in general? (Select all that apply) -->
 ```{r}
 # df <- data %>%
